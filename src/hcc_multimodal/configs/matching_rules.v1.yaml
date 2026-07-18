@@ -1,0 +1,9 @@
+version: longitudinal-matching-v1
+max_centroid_distance_mm: 30.0
+accept_cost: 0.78
+split_merge_distance_mm: 20.0
+distance_weight: 0.55
+overlap_weight: 0.25
+volume_weight: 0.20
+embedding_weight: 0.0
+volume_increase_signal_pct: 25.0

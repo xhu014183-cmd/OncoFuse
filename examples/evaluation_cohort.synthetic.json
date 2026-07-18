@@ -1,0 +1,25 @@
+{
+  "cohort_id": "SYNTHETIC_EVALUATION_INTERFACE",
+  "endpoint": {
+    "name": "radiographic_progression_within_followup_window",
+    "followup_window_days": 180,
+    "positive_label": "radiographic progression signal within 180 days",
+    "preregistration_id": null
+  },
+  "inclusion_criteria": [
+    "Synthetic paired record with a declared endpoint label"
+  ],
+  "exclusion_criteria": [
+    "Missing endpoint label"
+  ],
+  "records": [
+    {"patient_id": "SYN001", "split": "test", "center": "synthetic_a", "scanner_group": "thin", "baseline_date": "2026-01-01", "followup_date": "2026-04-01", "endpoint_label": 1, "image_only_score": 0.80, "lab_only_score": 0.70, "rule_fusion_score": 0.90},
+    {"patient_id": "SYN002", "split": "test", "center": "synthetic_a", "scanner_group": "thin", "baseline_date": "2026-01-01", "followup_date": "2026-04-01", "endpoint_label": 0, "image_only_score": 0.30, "lab_only_score": 0.40, "rule_fusion_score": 0.20},
+    {"patient_id": "SYN003", "split": "test", "center": "synthetic_a", "scanner_group": "thick", "baseline_date": "2026-01-01", "followup_date": "2026-04-01", "endpoint_label": 1, "image_only_score": 0.75, "lab_only_score": 0.65, "rule_fusion_score": 0.85},
+    {"patient_id": "SYN004", "split": "test", "center": "synthetic_a", "scanner_group": "thick", "baseline_date": "2026-01-01", "followup_date": "2026-04-01", "endpoint_label": 0, "image_only_score": 0.35, "lab_only_score": 0.45, "rule_fusion_score": 0.25},
+    {"patient_id": "SYN005", "split": "test", "center": "synthetic_b", "scanner_group": "thin", "baseline_date": "2026-01-01", "followup_date": "2026-04-01", "endpoint_label": 1, "image_only_score": 0.70, "lab_only_score": 0.80, "rule_fusion_score": 0.88},
+    {"patient_id": "SYN006", "split": "test", "center": "synthetic_b", "scanner_group": "thin", "baseline_date": "2026-01-01", "followup_date": "2026-04-01", "endpoint_label": 0, "image_only_score": 0.40, "lab_only_score": 0.20, "rule_fusion_score": 0.15},
+    {"patient_id": "SYN007", "split": "test", "center": "synthetic_b", "scanner_group": "thick", "baseline_date": "2026-01-01", "followup_date": "2026-04-01", "endpoint_label": 1, "image_only_score": null, "lab_only_score": 0.75, "rule_fusion_score": null, "missing_reasons": ["image unavailable"]},
+    {"patient_id": "SYN008", "split": "test", "center": "synthetic_b", "scanner_group": "thick", "baseline_date": "2026-01-01", "followup_date": "2026-04-01", "endpoint_label": 0, "image_only_score": 0.25, "lab_only_score": null, "rule_fusion_score": null, "missing_reasons": ["laboratory unavailable"]}
+  ]
+}

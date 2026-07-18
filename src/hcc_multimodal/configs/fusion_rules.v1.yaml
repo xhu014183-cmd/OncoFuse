@@ -1,0 +1,13 @@
+version: fusion-v1
+laboratory:
+  required_markers: [AFP, DCP]
+  max_evidence_age_days: 90
+  rising_requires_above_reference: true
+imaging:
+  progression_category: imaging_progression_signal
+  response_category: imaging_response_signal
+quality:
+  blocking_statuses: [fail, unavailable]
+  acceptable_pairing_statuses: [same_subject]
+treatment:
+  intervening_event_blocks_concordance: true
