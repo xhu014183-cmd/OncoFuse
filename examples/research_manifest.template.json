@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0.0",
+  "pipeline_version": "0.3.0",
+  "generated_at": "2026-07-19T00:00:00+00:00",
+  "sources": [],
+  "cohort_id": "REPLACE_WITH_LOCKED_COHORT_ID",
+  "data_root": "cohort-data",
+  "deidentified": true,
+  "legal_research_use_confirmed": true,
+  "cases": [
+    {
+      "patient_id": "PSEUDONYM_DEV_001",
+      "center_id": "DEVELOPMENT_CENTER",
+      "treatment": {
+        "treatment_date": "2026-02-01",
+        "treatment_type": "TACE",
+        "details": {}
+      },
+      "baseline": {
+        "study_id": "BASELINE",
+        "study_date": "2026-01-15",
+        "phase": "portal_venous",
+        "ct_dir": "PSEUDONYM_DEV_001/baseline/ct",
+        "seg_file": "PSEUDONYM_DEV_001/baseline/seg.dcm",
+        "study_instance_uid": "1.2.840.10008.1.1.1",
+        "series_instance_uid": "1.2.840.10008.1.1.2",
+        "seg_series_instance_uid": "1.2.840.10008.1.1.3",
+        "frame_of_reference_uid": "1.2.840.10008.1.1.4",
+        "scanner_group": "thin_slice",
+        "registration_status": "not_applicable"
+      },
+      "followups": [
+        {
+          "study_id": "FOLLOWUP_170D",
+          "study_date": "2026-07-21",
+          "phase": "portal_venous",
+          "ct_dir": "PSEUDONYM_DEV_001/followup-170d/ct",
+          "seg_file": "PSEUDONYM_DEV_001/followup-170d/seg.dcm",
+          "study_instance_uid": "1.2.840.10008.1.2.1",
+          "series_instance_uid": "1.2.840.10008.1.2.2",
+          "seg_series_instance_uid": "1.2.840.10008.1.2.3",
+          "frame_of_reference_uid": "1.2.840.10008.1.2.4",
+          "scanner_group": "thin_slice",
+          "registration_status": "verified"
+        }
+      ],
+      "labs_file": "PSEUDONYM_DEV_001/labs.json"
+    },
+    {
+      "patient_id": "PSEUDONYM_EXT_001",
+      "center_id": "REPLACE_WITH_EXTERNAL_CENTER_ID",
+      "treatment": {
+        "treatment_date": "2026-02-01",
+        "treatment_type": "ablation",
+        "details": {}
+      },
+      "baseline": {
+        "study_id": "BASELINE",
+        "study_date": "2026-01-20",
+        "phase": "portal_venous",
+        "ct_dir": "PSEUDONYM_EXT_001/baseline/ct",
+        "seg_file": "PSEUDONYM_EXT_001/baseline/seg.dcm",
+        "study_instance_uid": "1.2.840.10008.2.1.1",
+        "series_instance_uid": "1.2.840.10008.2.1.2",
+        "seg_series_instance_uid": "1.2.840.10008.2.1.3",
+        "frame_of_reference_uid": "1.2.840.10008.2.1.4",
+        "scanner_group": "standard_slice",
+        "registration_status": "not_applicable"
+      },
+      "followups": [
+        {
+          "study_id": "FOLLOWUP_160D",
+          "study_date": "2026-07-11",
+          "phase": "portal_venous",
+          "ct_dir": "PSEUDONYM_EXT_001/followup-160d/ct",
+          "seg_file": "PSEUDONYM_EXT_001/followup-160d/seg.dcm",
+          "study_instance_uid": "1.2.840.10008.2.2.1",
+          "series_instance_uid": "1.2.840.10008.2.2.2",
+          "seg_series_instance_uid": "1.2.840.10008.2.2.3",
+          "frame_of_reference_uid": "1.2.840.10008.2.2.4",
+          "scanner_group": "standard_slice",
+          "registration_status": "verified"
+        }
+      ],
+      "labs_file": "PSEUDONYM_EXT_001/labs.json"
+    }
+  ]
+}

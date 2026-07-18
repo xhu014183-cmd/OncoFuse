@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0.0",
+  "pipeline_version": "0.3.0",
+  "generated_at": "2026-07-19T00:00:00+00:00",
+  "sources": [],
+  "cohort_id": "REPLACE_WITH_LOCKED_COHORT_ID",
+  "scope": "development",
+  "records": [
+    {
+      "patient_id": "PSEUDONYM_DEV_001",
+      "study_id": "FOLLOWUP_170D",
+      "reviewers": [
+        {
+          "reviewer_id_hash": "REVIEWER_HASH_A",
+          "label": "no_progression",
+          "reason_codes": ["BLINDED_IMAGE_REVIEW"],
+          "reviewed_at": "2026-08-01T00:00:00+00:00"
+        },
+        {
+          "reviewer_id_hash": "REVIEWER_HASH_B",
+          "label": "no_progression",
+          "reason_codes": ["BLINDED_IMAGE_REVIEW"],
+          "reviewed_at": "2026-08-02T00:00:00+00:00"
+        }
+      ],
+      "adjudicator": null,
+      "final_label": "no_progression"
+    }
+  ]
+}

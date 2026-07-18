@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "pipeline_version": "0.3.0",
+  "generated_at": "2026-07-19T00:00:00+00:00",
+  "sources": [],
+  "cohort_id": "REPLACE_WITH_LOCKED_COHORT_ID",
+  "external_test_center_ids": ["REPLACE_WITH_EXTERNAL_CENTER_ID"],
+  "required_phase": "portal_venous",
+  "endpoint_name": "radiographic_progression_within_180_days",
+  "endpoint_window_days": 180,
+  "negative_followup_min_days": 150,
+  "negative_followup_max_days": 210,
+  "baseline_max_days_before_treatment": 42,
+  "lab_alignment_days": 14,
+  "primary_metric": "auprc",
+  "fixed_score_threshold": 0.5,
+  "bootstrap_iterations": 2000,
+  "bootstrap_seed": 1729,
+  "minimum_inferential_stratum_size": 20,
+  "split_salt": "REPLACE_WITH_PREREGISTERED_SPLIT_SALT",
+  "inclusion_criteria": ["Pretreatment portal-venous CT and expert SEG"],
+  "exclusion_criteria": ["Geometry or identity validation failure"]
+}

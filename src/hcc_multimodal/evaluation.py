@@ -100,6 +100,8 @@ def _point_metrics(labels: np.ndarray, scores: np.ndarray) -> dict[str, float | 
     false_negative = int(np.sum(~predictions & positive))
     sensitivity = true_positive / (true_positive + false_negative) if positive.any() else None
     specificity = true_negative / (true_negative + false_positive) if negative.any() else None
+    ppv = true_positive / (true_positive + false_positive) if predictions.any() else None
+    npv = true_negative / (true_negative + false_negative) if (~predictions).any() else None
     brier = float(np.mean((scores - labels) ** 2)) if len(labels) else None
     bins = np.minimum((scores * 10).astype(int), 9)
     calibration_error = 0.0
@@ -114,6 +116,8 @@ def _point_metrics(labels: np.ndarray, scores: np.ndarray) -> dict[str, float | 
         "auprc": _average_precision(labels, scores),
         "sensitivity_at_0_5": sensitivity,
         "specificity_at_0_5": specificity,
+        "ppv_at_0_5": ppv,
+        "npv_at_0_5": npv,
         "brier_score": brier,
         "expected_calibration_error_10_bin": calibration_error,
     }

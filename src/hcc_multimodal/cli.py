@@ -14,6 +14,16 @@ from .imaging import compare_imaging, measure_nifti
 from .labs import load_lab_evidence
 from .preview import create_overlay_montage
 from .prompting import build_report_prompt, write_prompt_bundle
+from .research_cohort import build_research_cohort, validate_research_cohort
+from .research_evaluation import evaluate_research_cohort, validate_adjudications
+from .research_models import (
+    AdjudicationSet,
+    CohortValidationReport,
+    ResearchCohortManifest,
+    ResearchEvaluationArtifact,
+    ResearchProtocol,
+    ResearchRunManifest,
+)
 from .synthetic import generate_synthetic_case
 from .schemas import (
     PIPELINE_VERSION,
@@ -47,6 +57,12 @@ def _schema_models() -> dict[str, type[JsonModel]]:
         "lab-evidence": LabEvidence,
         "longitudinal-imaging-evidence": LongitudinalImagingEvidence,
         "multimodal-case-evidence": MultimodalCaseEvidence,
+        "research-protocol": ResearchProtocol,
+        "research-cohort-manifest": ResearchCohortManifest,
+        "cohort-validation-report": CohortValidationReport,
+        "research-run-manifest": ResearchRunManifest,
+        "adjudication-set": AdjudicationSet,
+        "research-evaluation": ResearchEvaluationArtifact,
     }
 
 
@@ -523,6 +539,47 @@ def main() -> None:
     )
     validate.add_argument("--type", required=True, choices=tuple(_schema_models()))
     validate.add_argument("--input", required=True)
+    validate_cohort = subparsers.add_parser(
+        "validate-research-cohort",
+        help="Validate a deidentified multicenter research protocol and cohort manifest",
+    )
+    validate_cohort.add_argument("--protocol", required=True)
+    validate_cohort.add_argument("--manifest", required=True)
+    validate_cohort.add_argument("--output", required=True)
+    build_cohort = subparsers.add_parser(
+        "build-research-cohort",
+        help="Build label-free deterministic evidence for a validated research cohort",
+    )
+    build_cohort.add_argument("--protocol", required=True)
+    build_cohort.add_argument("--manifest", required=True)
+    build_cohort.add_argument("--output", required=True)
+    validate_labels = subparsers.add_parser(
+        "validate-adjudications",
+        help="Validate blinded review records against a locked research run",
+    )
+    validate_labels.add_argument("--run", required=True)
+    validate_labels.add_argument("--adjudications", required=True)
+    validate_labels.add_argument("--output", required=True)
+    validate_labels.add_argument("--external-unlock-audit", default=None)
+    evaluate_research = subparsers.add_parser(
+        "evaluate-research-cohort",
+        help="Evaluate locked deterministic baselines using separate adjudication labels",
+    )
+    evaluate_research.add_argument("--protocol", required=True)
+    evaluate_research.add_argument("--manifest", required=True)
+    evaluate_research.add_argument("--run", required=True)
+    evaluate_research.add_argument("--adjudications", required=True)
+    evaluate_research.add_argument("--output", required=True)
+    evaluate_research.add_argument(
+        "--scope",
+        choices=("development", "external_test"),
+        required=True,
+    )
+    evaluate_research.add_argument(
+        "--unlock-external",
+        action="store_true",
+        help="Explicitly authorize one external-test label access in this output directory",
+    )
     args = parser.parse_args()
 
     if args.command == "generate":
@@ -656,6 +713,43 @@ def main() -> None:
         model = _schema_models()[args.type]
         artifact = model.model_validate_json(Path(args.input).read_text(encoding="utf-8"))
         print(f"Valid {args.type} schema_version={getattr(artifact, 'schema_version', 'nested')}")
+    elif args.command == "validate-research-cohort":
+        result_path = validate_research_cohort(
+            args.protocol,
+            args.manifest,
+            args.output,
+        )
+        print(f"Wrote {result_path}")
+        print(result_path.read_text(encoding="utf-8"))
+    elif args.command == "build-research-cohort":
+        result_path = build_research_cohort(
+            args.protocol,
+            args.manifest,
+            args.output,
+        )
+        print(f"Wrote {result_path}")
+        print(result_path.read_text(encoding="utf-8"))
+    elif args.command == "validate-adjudications":
+        result_path = validate_adjudications(
+            args.run,
+            args.adjudications,
+            args.output,
+            external_unlock_audit=args.external_unlock_audit,
+        )
+        print(f"Wrote {result_path}")
+        print(result_path.read_text(encoding="utf-8"))
+    elif args.command == "evaluate-research-cohort":
+        result_path = evaluate_research_cohort(
+            args.protocol,
+            args.manifest,
+            args.run,
+            args.adjudications,
+            args.output,
+            scope=args.scope,
+            unlock_external=args.unlock_external,
+        )
+        print(f"Wrote {result_path}")
+        print(result_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

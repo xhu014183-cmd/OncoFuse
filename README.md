@@ -159,6 +159,46 @@ always marks clinical performance claims as not permitted.
 See [docs/RESEARCH_EVALUATION.md](docs/RESEARCH_EVALUATION.md) for the data
 checklist and pre-registration fields.
 
+## Locked multicenter research validation
+
+Pipeline `0.3.0` adds a label-separated workflow for a local deidentified,
+paired cohort. The protocol is fixed to pretreatment portal-venous CT within
+42 days, AFP/DCP within 14 days of each image, and blinded radiographic
+progression within 180 days. An entire explicitly named center is held out as
+the external test set.
+
+```powershell
+.\.venv\Scripts\hcc-demo validate-research-cohort `
+  --protocol examples\research_protocol.template.json `
+  --manifest path\to\research_manifest.json `
+  --output cohort-validation.json
+
+.\.venv\Scripts\hcc-demo build-research-cohort `
+  --protocol examples\research_protocol.template.json `
+  --manifest path\to\research_manifest.json `
+  --output locked-features
+
+.\.venv\Scripts\hcc-demo validate-adjudications `
+  --run locked-features\research_run_manifest.json `
+  --adjudications path\outside\locked-features\development-labels.json `
+  --output development-adjudication-validation.json
+
+.\.venv\Scripts\hcc-demo evaluate-research-cohort `
+  --protocol examples\research_protocol.template.json `
+  --manifest path\to\research_manifest.json `
+  --run locked-features\research_run_manifest.json `
+  --adjudications path\outside\locked-features\development-labels.json `
+  --scope development `
+  --output development-evaluation
+```
+
+The feature build has no adjudication argument and records
+`label_data_loaded=false`. External-center evaluation additionally requires
+the explicit one-time `--unlock-external` flag and writes an unlock audit.
+Formal evaluation uses 2000 patient-level paired bootstrap samples and never
+calls an LLM. See [docs/REAL_COHORT_VALIDATION.md](docs/REAL_COHORT_VALIDATION.md)
+for the directory boundary, endpoint rules, and expected outputs.
+
 ## Public schemas
 
 ```powershell
@@ -168,8 +208,8 @@ checklist and pre-registration fields.
   --input demo-output\clinical_verdict.json
 ```
 
-Version 1.0 is intentionally incompatible with the earlier 0.1 dataclass JSON.
-See [MIGRATION.md](MIGRATION.md).
+Schema 1.0 remains current. Pipeline 0.3 adds cohort artifacts without
+invalidating valid 0.2 schema-1.0 artifacts. See [MIGRATION.md](MIGRATION.md).
 
 ## Optional 3D encoders
 

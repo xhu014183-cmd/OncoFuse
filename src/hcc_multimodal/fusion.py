@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -75,6 +75,7 @@ def fuse_evidence(
     imaging: LongitudinalImagingEvidence,
     *,
     treatment_events: list[dict[str, Any]] | None = None,
+    treatment_context: Literal["none", "index_treatment"] = "none",
     rules_path: str | Path | None = None,
 ) -> ClinicalVerdict:
     """Fuse validated evidence through versioned, fully traceable research rules."""
@@ -141,6 +142,8 @@ def fuse_evidence(
             [imaging_ref],
             "An intervening treatment event prevents attribution of longitudinal change"
             if intervening_treatment
+            else "The planned index treatment is recorded as a stratification variable"
+            if treatment_context == "index_treatment"
             else "No intervening treatment event was supplied",
             version,
         )

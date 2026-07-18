@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 SCHEMA_VERSION = "1.0.0"
-PIPELINE_VERSION = "0.2.0"
+PIPELINE_VERSION = "0.3.0"
 
 QualityStatus = Literal["pass", "warning", "fail", "unavailable"]
 Comparator = Literal["eq", "lt", "le", "gt", "ge"]
@@ -59,7 +59,7 @@ class SourceReference(JsonModel):
 
 class ArtifactModel(JsonModel):
     schema_version: Literal["1.0.0"] = "1.0.0"
-    pipeline_version: Literal["0.2.0"] = "0.2.0"
+    pipeline_version: str = PIPELINE_VERSION
     generated_at: datetime = Field(default_factory=_generated_at)
     sources: list[SourceReference] = Field(default_factory=list)
 
@@ -68,6 +68,14 @@ class ArtifactModel(JsonModel):
     def generated_at_must_include_timezone(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("generated_at must include a timezone")
+        return value
+
+    @field_validator("pipeline_version")
+    @classmethod
+    def pipeline_version_must_be_semver(cls, value: str) -> str:
+        parts = value.split(".")
+        if len(parts) != 3 or not all(part.isdigit() for part in parts):
+            raise ValueError("pipeline_version must use numeric MAJOR.MINOR.PATCH syntax")
         return value
 
 

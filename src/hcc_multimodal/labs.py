@@ -372,3 +372,95 @@ def load_lab_evidence(path: str | Path, *, index_time: str | None = None) -> Lab
             )
         ],
     )
+
+
+def align_lab_evidence(
+    labs: LabEvidence,
+    *,
+    baseline_date: str,
+    followup_date: str,
+    window_days: int = 14,
+) -> LabEvidence:
+    """Select one observation per marker around each image without future-data preference."""
+    if window_days < 0:
+        raise ValueError("window_days must be non-negative")
+    targets = (date.fromisoformat(baseline_date), date.fromisoformat(followup_date))
+    if targets[0] >= targets[1]:
+        raise ValueError("followup_date must occur after baseline_date")
+
+    aligned_markers: dict[str, MarkerTrend] = {}
+    warnings = list(labs.warnings)
+    selected_dates: dict[str, list[str]] = {}
+    for marker_name in ("AFP", "DCP"):
+        marker = labs.markers.get(marker_name)
+        if marker is None:
+            warnings.append(f"{marker_name} is unavailable for image-aligned analysis")
+            continue
+        selected: list[MarkerObservation] = []
+        for target in targets:
+            candidates: list[tuple[int, int, int, MarkerObservation]] = []
+            for observation in marker.observations:
+                observed = date.fromisoformat(observation.date)
+                distance = abs((observed - target).days)
+                if distance <= window_days:
+                    after_image = 1 if observed > target else 0
+                    candidates.append(
+                        (distance, after_image, -observed.toordinal(), observation)
+                    )
+            if candidates:
+                selected.append(min(candidates, key=lambda item: item[:3])[3])
+        unique = {(item.date, item.source_text, item.comparator): item for item in selected}
+        ordered = sorted(unique.values(), key=lambda item: item.date)
+        if len(ordered) < 2:
+            warnings.append(
+                f"{marker_name} lacks distinct baseline/follow-up observations within "
+                f"+/-{window_days} days"
+            )
+        if ordered:
+            marker_key: MarkerName = "AFP" if marker_name == "AFP" else "DCP"
+            aligned_markers[marker_name] = _trend(marker_key, ordered)
+            selected_dates[marker_name] = [item.date for item in ordered]
+
+    if not aligned_markers:
+        status: QualityStatus = "fail"
+        errors = ["No AFP or DCP observations align with the image dates"]
+    elif warnings or any(
+        marker.exact_observation_count < 2 for marker in aligned_markers.values()
+    ):
+        status = "warning"
+        errors = []
+    else:
+        status = "pass"
+        errors = []
+    provenance = {
+        **labs.provenance,
+        "adapter": "image-aligned-afp-dcp-v1",
+        "baseline_date": baseline_date,
+        "followup_date": followup_date,
+        "alignment_window_days": window_days,
+        "selected_dates": selected_dates,
+    }
+    return LabEvidence(
+        patient_id=labs.patient_id,
+        markers=aligned_markers,
+        rejected_observations=labs.rejected_observations,
+        quality=QualityEvidence(
+            status=status,
+            checks=[
+                QualityCheck(
+                    check_id="LAB_IMAGE_ALIGNMENT",
+                    status="pass" if status == "pass" else "warning" if aligned_markers else "fail",
+                    message=(
+                        f"Selected observations within +/-{window_days} days of baseline "
+                        "and follow-up imaging"
+                    ),
+                    details={"selected_dates": selected_dates},
+                )
+            ],
+            warnings=sorted(set(warnings)),
+            errors=errors,
+        ),
+        warnings=sorted(set(warnings)),
+        provenance=provenance,
+        sources=labs.sources,
+    )

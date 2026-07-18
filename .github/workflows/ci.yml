@@ -30,6 +30,11 @@ jobs:
         run: python -m pytest --cov=hcc_multimodal --cov-report=term-missing -q
       - name: Export public schemas
         run: hcc-demo export-schemas --output schema-output
+      - name: Validate research contract templates
+        run: |
+          hcc-demo validate-json --type research-protocol --input examples/research_protocol.template.json
+          hcc-demo validate-json --type research-cohort-manifest --input examples/research_manifest.template.json
+          hcc-demo validate-json --type adjudication-set --input examples/adjudications.template.json
       - name: Run synthetic end-to-end demo
         run: hcc-demo run-demo --output demo-output
       - name: Validate end-to-end artifacts
