@@ -1,0 +1,528 @@
+{
+  "$defs": {
+    "HpiEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "available_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Available At"
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "moderate",
+            "low"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "date_source": {
+          "enum": [
+            "explicit",
+            "relative_resolved",
+            "relative_unresolved",
+            "missing"
+          ],
+          "title": "Date Source",
+          "type": "string"
+        },
+        "event_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Event Date"
+        },
+        "event_type": {
+          "enum": [
+            "symptom",
+            "imaging",
+            "laboratory",
+            "procedure",
+            "treatment",
+            "surgery",
+            "hospitalization",
+            "pathology_text",
+            "followup",
+            "other"
+          ],
+          "title": "Event Type",
+          "type": "string"
+        },
+        "normalized_concept": {
+          "title": "Normalized Concept",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "source_span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_date",
+        "available_at",
+        "event_type",
+        "text",
+        "normalized_concept",
+        "date_source",
+        "source_span",
+        "confidence",
+        "source"
+      ],
+      "title": "HpiEvent",
+      "type": "object"
+    },
+    "MarkerTrajectorySummary": {
+      "additionalProperties": false,
+      "properties": {
+        "analyte": {
+          "title": "Analyte",
+          "type": "string"
+        },
+        "baseline_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Baseline Date"
+        },
+        "baseline_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Baseline Value"
+        },
+        "latest_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Latest Date"
+        },
+        "latest_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Latest Value"
+        },
+        "log_slope_per_day": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Log Slope Per Day"
+        },
+        "nadir_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Nadir Date"
+        },
+        "nadir_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Nadir Ratio"
+        },
+        "nadir_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Nadir Value"
+        },
+        "rebound_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rebound Ratio"
+        },
+        "state": {
+          "enum": [
+            "insufficient",
+            "stable_normal",
+            "stable_abnormal",
+            "falling_after_treatment",
+            "plateau_after_treatment",
+            "rebound_after_nadir",
+            "persistent_rising",
+            "discordant_markers"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "analyte",
+        "state",
+        "baseline_value",
+        "baseline_date",
+        "nadir_value",
+        "nadir_date",
+        "latest_value",
+        "latest_date",
+        "log_slope_per_day",
+        "nadir_ratio",
+        "rebound_ratio"
+      ],
+      "title": "MarkerTrajectorySummary",
+      "type": "object"
+    },
+    "QualityCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check_id",
+        "status",
+        "message"
+      ],
+      "title": "QualityCheck",
+      "type": "object"
+    },
+    "QualityEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/QualityCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Errors",
+          "type": "array"
+        },
+        "image_mask_aligned": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Mask Aligned"
+        },
+        "spacing_mm": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Spacing Mm",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "QualityEvidence",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    },
+    "SourceSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "exclusiveMinimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "SourceSpan",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "events": {
+      "items": {
+        "$ref": "#/$defs/HpiEvent"
+      },
+      "title": "Events",
+      "type": "array"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "imaging_state": {
+      "enum": [
+        "single_timepoint",
+        "stable",
+        "response_signal",
+        "progression_signal",
+        "new_lesion_signal",
+        "indeterminate",
+        "unavailable"
+      ],
+      "title": "Imaging State",
+      "type": "string"
+    },
+    "index_date": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Index Date"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "liver_function_state": {
+      "enum": [
+        "stable",
+        "improving",
+        "worsening",
+        "mixed",
+        "insufficient"
+      ],
+      "title": "Liver Function State",
+      "type": "string"
+    },
+    "marker_trajectories": {
+      "additionalProperties": {
+        "$ref": "#/$defs/MarkerTrajectorySummary"
+      },
+      "title": "Marker Trajectories",
+      "type": "object"
+    },
+    "overall_trend": {
+      "enum": [
+        "concordant_response",
+        "concordant_progression",
+        "discordant_evidence",
+        "stable_with_uncertainty",
+        "insufficient_evidence"
+      ],
+      "title": "Overall Trend",
+      "type": "string"
+    },
+    "patient_id": {
+      "title": "Patient Id",
+      "type": "string"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "quality": {
+      "$ref": "#/$defs/QualityEvidence"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "treatment_dates": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Treatment Dates",
+      "type": "array"
+    }
+  },
+  "required": [
+    "patient_id",
+    "index_date",
+    "events",
+    "treatment_dates",
+    "marker_trajectories",
+    "imaging_state",
+    "liver_function_state",
+    "overall_trend",
+    "quality",
+    "limitations"
+  ],
+  "title": "HpiTimelineEvidence",
+  "type": "object"
+}

@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 SCHEMA_VERSION = "1.0.0"
-PIPELINE_VERSION = "0.3.0"
+PIPELINE_VERSION = "0.4.0"
 
 QualityStatus = Literal["pass", "warning", "fail", "unavailable"]
 Comparator = Literal["eq", "lt", "le", "gt", "ge"]

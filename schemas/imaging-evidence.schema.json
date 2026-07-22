@@ -1,0 +1,480 @@
+{
+  "$defs": {
+    "ImageGeometry": {
+      "additionalProperties": false,
+      "properties": {
+        "acquisition_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acquisition Id"
+        },
+        "affine": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "title": "Affine",
+          "type": "array"
+        },
+        "coordinate_system": {
+          "default": "unknown",
+          "enum": [
+            "RAS",
+            "LPS",
+            "unknown"
+          ],
+          "title": "Coordinate System",
+          "type": "string"
+        },
+        "frame_of_reference_uid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Of Reference Uid"
+        },
+        "orientation_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Orientation Codes",
+          "type": "array"
+        },
+        "phase": {
+          "default": "unknown",
+          "title": "Phase",
+          "type": "string"
+        },
+        "segment_number": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Segment Number"
+        },
+        "segment_series_instance_uid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Segment Series Instance Uid"
+        },
+        "series_instance_uid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Series Instance Uid"
+        },
+        "shape": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Shape",
+          "type": "array"
+        },
+        "spacing_mm": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Spacing Mm",
+          "type": "array"
+        },
+        "study_instance_uid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Study Instance Uid"
+        },
+        "voxel_axis_order": {
+          "default": "i,j,k",
+          "title": "Voxel Axis Order",
+          "type": "string"
+        }
+      },
+      "required": [
+        "shape",
+        "spacing_mm",
+        "affine"
+      ],
+      "title": "ImageGeometry",
+      "type": "object"
+    },
+    "LesionEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox_voxel_ijk": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Bbox Voxel Ijk",
+          "type": "array"
+        },
+        "bbox_world_mm": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "title": "Bbox World Mm",
+          "type": "array"
+        },
+        "centroid_world_mm": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Centroid World Mm",
+          "type": "array"
+        },
+        "lesion_id": {
+          "title": "Lesion Id",
+          "type": "string"
+        },
+        "max_3d_extent_mm": {
+          "exclusiveMinimum": 0,
+          "title": "Max 3D Extent Mm",
+          "type": "number"
+        },
+        "mean_image_intensity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mean Image Intensity"
+        },
+        "volume_ml": {
+          "exclusiveMinimum": 0,
+          "title": "Volume Ml",
+          "type": "number"
+        },
+        "voxel_count": {
+          "minimum": 1,
+          "title": "Voxel Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lesion_id",
+        "voxel_count",
+        "volume_ml",
+        "max_3d_extent_mm",
+        "centroid_world_mm",
+        "bbox_voxel_ijk",
+        "bbox_world_mm",
+        "mean_image_intensity"
+      ],
+      "title": "LesionEvidence",
+      "type": "object"
+    },
+    "QualityCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check_id",
+        "status",
+        "message"
+      ],
+      "title": "QualityCheck",
+      "type": "object"
+    },
+    "QualityEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/QualityCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Errors",
+          "type": "array"
+        },
+        "image_mask_aligned": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Mask Aligned"
+        },
+        "spacing_mm": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Spacing Mm",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "QualityEvidence",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "body_region": {
+      "title": "Body Region",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "geometry": {
+      "$ref": "#/$defs/ImageGeometry"
+    },
+    "inference_mode": {
+      "title": "Inference Mode",
+      "type": "string"
+    },
+    "interpretation_limits": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Interpretation Limits",
+      "type": "array"
+    },
+    "lesion_count": {
+      "minimum": 0,
+      "title": "Lesion Count",
+      "type": "integer"
+    },
+    "lesions": {
+      "items": {
+        "$ref": "#/$defs/LesionEvidence"
+      },
+      "title": "Lesions",
+      "type": "array"
+    },
+    "max_lesion_extent_mm": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Max Lesion Extent Mm"
+    },
+    "modality": {
+      "title": "Modality",
+      "type": "string"
+    },
+    "patient_id": {
+      "title": "Patient Id",
+      "type": "string"
+    },
+    "phase": {
+      "default": "unknown",
+      "title": "Phase",
+      "type": "string"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "provenance": {
+      "additionalProperties": true,
+      "title": "Provenance",
+      "type": "object"
+    },
+    "provider": {
+      "title": "Provider",
+      "type": "string"
+    },
+    "quality": {
+      "$ref": "#/$defs/QualityEvidence"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "study_date": {
+      "title": "Study Date",
+      "type": "string"
+    },
+    "total_tumor_volume_ml": {
+      "minimum": 0,
+      "title": "Total Tumor Volume Ml",
+      "type": "number"
+    }
+  },
+  "required": [
+    "patient_id",
+    "study_date",
+    "modality",
+    "body_region",
+    "provider",
+    "inference_mode",
+    "geometry",
+    "quality",
+    "lesion_count",
+    "total_tumor_volume_ml",
+    "max_lesion_extent_mm",
+    "lesions",
+    "provenance",
+    "interpretation_limits"
+  ],
+  "title": "ImagingEvidence",
+  "type": "object"
+}

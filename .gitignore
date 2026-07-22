@@ -4,11 +4,16 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .coverage
+.env
+.env.*
 dist/
 build/
 demo-output/
 public-data/
 embedding-output/
+case-output/
+synthetic-case/
+*.dcm
 *.npy
 *.nii
 *.nii.gz

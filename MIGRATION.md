@@ -50,3 +50,20 @@ The feature build and adjudication files are intentionally separate. There is
 no supported migration that embeds labels into a run manifest. Existing 0.2
 single-case outputs remain readable, but they cannot be treated as a locked
 multicenter run without rebuilding from a manifest and protocol.
+
+## Pipeline 0.4 three-line case additions
+
+Pipeline 0.4 keeps `schema_version=1.0.0` and does not invalidate valid 0.2
+or 0.3 artifacts. It adds `imaging-interpretation-evidence`,
+`clinical-lab-evidence`, `hpi-timeline-evidence`, and
+`case-research-summary` as new public artifact types.
+
+The new commands are `parse-imaging`, `parse-labs`, `parse-hpi`,
+`summarize-case`, and the one-step `analyze-case`. They accept complete CT/MR
+DICOM series, optional DICOM SEG, structured image-tool JSON, laboratory
+TXT/JSON/CSV, and optional HPI text/JSON. The existing NIfTI and research
+cohort commands remain available.
+
+No automatic conversion is provided from the old AFP/DCP `LabEvidence` to
+`ClinicalLabEvidence`: re-run the original report so source spans, extended
+analytes, rejected values, and unit semantics remain auditable.

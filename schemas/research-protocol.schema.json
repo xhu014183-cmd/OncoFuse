@@ -1,0 +1,194 @@
+{
+  "$defs": {
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "baseline_max_days_before_treatment": {
+      "const": 42,
+      "default": 42,
+      "title": "Baseline Max Days Before Treatment",
+      "type": "integer"
+    },
+    "bootstrap_iterations": {
+      "const": 2000,
+      "default": 2000,
+      "title": "Bootstrap Iterations",
+      "type": "integer"
+    },
+    "bootstrap_seed": {
+      "default": 1729,
+      "title": "Bootstrap Seed",
+      "type": "integer"
+    },
+    "cohort_id": {
+      "minLength": 1,
+      "title": "Cohort Id",
+      "type": "string"
+    },
+    "endpoint_name": {
+      "const": "radiographic_progression_within_180_days",
+      "default": "radiographic_progression_within_180_days",
+      "title": "Endpoint Name",
+      "type": "string"
+    },
+    "endpoint_window_days": {
+      "const": 180,
+      "default": 180,
+      "title": "Endpoint Window Days",
+      "type": "integer"
+    },
+    "exclusion_criteria": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Exclusion Criteria",
+      "type": "array"
+    },
+    "external_test_center_ids": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "External Test Center Ids",
+      "type": "array"
+    },
+    "fixed_score_threshold": {
+      "default": 0.5,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Fixed Score Threshold",
+      "type": "number"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "inclusion_criteria": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Inclusion Criteria",
+      "type": "array"
+    },
+    "lab_alignment_days": {
+      "const": 14,
+      "default": 14,
+      "title": "Lab Alignment Days",
+      "type": "integer"
+    },
+    "minimum_inferential_stratum_size": {
+      "const": 20,
+      "default": 20,
+      "title": "Minimum Inferential Stratum Size",
+      "type": "integer"
+    },
+    "negative_followup_max_days": {
+      "const": 210,
+      "default": 210,
+      "title": "Negative Followup Max Days",
+      "type": "integer"
+    },
+    "negative_followup_min_days": {
+      "const": 150,
+      "default": 150,
+      "title": "Negative Followup Min Days",
+      "type": "integer"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "primary_metric": {
+      "const": "auprc",
+      "default": "auprc",
+      "title": "Primary Metric",
+      "type": "string"
+    },
+    "required_phase": {
+      "const": "portal_venous",
+      "default": "portal_venous",
+      "title": "Required Phase",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "split_salt": {
+      "minLength": 8,
+      "title": "Split Salt",
+      "type": "string"
+    }
+  },
+  "required": [
+    "cohort_id",
+    "external_test_center_ids",
+    "split_salt"
+  ],
+  "title": "ResearchProtocol",
+  "type": "object"
+}

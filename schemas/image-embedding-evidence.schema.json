@@ -1,0 +1,304 @@
+{
+  "$defs": {
+    "QualityCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check_id",
+        "status",
+        "message"
+      ],
+      "title": "QualityCheck",
+      "type": "object"
+    },
+    "QualityEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/QualityCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Errors",
+          "type": "array"
+        },
+        "image_mask_aligned": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Mask Aligned"
+        },
+        "spacing_mm": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Spacing Mm",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "QualityEvidence",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Manifest for a separately stored image representation artifact.",
+  "properties": {
+    "artifact_file": {
+      "title": "Artifact File",
+      "type": "string"
+    },
+    "artifact_sha256": {
+      "title": "Artifact Sha256",
+      "type": "string"
+    },
+    "available": {
+      "title": "Available",
+      "type": "boolean"
+    },
+    "embedding_dimension": {
+      "title": "Embedding Dimension",
+      "type": "integer"
+    },
+    "embedding_dtype": {
+      "title": "Embedding Dtype",
+      "type": "string"
+    },
+    "encoder_name": {
+      "title": "Encoder Name",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "input_shape": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Input Shape",
+      "type": "array"
+    },
+    "input_spacing_mm": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Input Spacing Mm",
+      "type": "array"
+    },
+    "intended_use": {
+      "title": "Intended Use",
+      "type": "string"
+    },
+    "l2_norm": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "L2 Norm"
+    },
+    "mask_usage": {
+      "title": "Mask Usage",
+      "type": "string"
+    },
+    "model_name": {
+      "title": "Model Name",
+      "type": "string"
+    },
+    "model_revision": {
+      "title": "Model Revision",
+      "type": "string"
+    },
+    "normalized": {
+      "title": "Normalized",
+      "type": "boolean"
+    },
+    "patient_id": {
+      "title": "Patient Id",
+      "type": "string"
+    },
+    "phase": {
+      "default": "unknown",
+      "title": "Phase",
+      "type": "string"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "preprocessing": {
+      "additionalProperties": true,
+      "title": "Preprocessing",
+      "type": "object"
+    },
+    "quality": {
+      "$ref": "#/$defs/QualityEvidence"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_evidence_id": {
+      "title": "Source Evidence Id",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "study_date": {
+      "title": "Study Date",
+      "type": "string"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source_evidence_id",
+    "patient_id",
+    "study_date",
+    "encoder_name",
+    "model_name",
+    "model_revision",
+    "embedding_dimension",
+    "embedding_dtype",
+    "normalized",
+    "artifact_file",
+    "artifact_sha256",
+    "input_shape",
+    "input_spacing_mm",
+    "preprocessing",
+    "mask_usage",
+    "available",
+    "quality",
+    "warnings",
+    "intended_use"
+  ],
+  "title": "ImageEmbeddingEvidence",
+  "type": "object"
+}

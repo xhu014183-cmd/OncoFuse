@@ -1,0 +1,409 @@
+{
+  "$defs": {
+    "LesionMatchEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline_lesion_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Baseline Lesion Ids",
+          "type": "array"
+        },
+        "bbox_iou": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bbox Iou"
+        },
+        "centroid_distance_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Centroid Distance Mm"
+        },
+        "confidence": {
+          "default": "unavailable",
+          "enum": [
+            "high",
+            "moderate",
+            "low",
+            "unavailable"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "embedding_cosine_similarity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Cosine Similarity"
+        },
+        "followup_lesion_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Followup Lesion Ids",
+          "type": "array"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "matched",
+            "new",
+            "disappeared",
+            "split_candidate",
+            "merge_candidate",
+            "indeterminate"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "total_cost": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Cost"
+        },
+        "volume_change_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume Change Pct"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "LesionMatchEvidence",
+      "type": "object"
+    },
+    "QualityCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check_id",
+        "status",
+        "message"
+      ],
+      "title": "QualityCheck",
+      "type": "object"
+    },
+    "QualityEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/QualityCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Errors",
+          "type": "array"
+        },
+        "image_mask_aligned": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Mask Aligned"
+        },
+        "spacing_mm": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Spacing Mm",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "QualityEvidence",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "baseline_date": {
+      "title": "Baseline Date",
+      "type": "string"
+    },
+    "baseline_lesion_count": {
+      "title": "Baseline Lesion Count",
+      "type": "integer"
+    },
+    "baseline_total_volume_ml": {
+      "title": "Baseline Total Volume Ml",
+      "type": "number"
+    },
+    "category": {
+      "title": "Category",
+      "type": "string"
+    },
+    "followup_date": {
+      "title": "Followup Date",
+      "type": "string"
+    },
+    "followup_lesion_count": {
+      "title": "Followup Lesion Count",
+      "type": "integer"
+    },
+    "followup_total_volume_ml": {
+      "title": "Followup Total Volume Ml",
+      "type": "number"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "matched_lesions": {
+      "items": {
+        "$ref": "#/$defs/LesionMatchEvidence"
+      },
+      "title": "Matched Lesions",
+      "type": "array"
+    },
+    "method": {
+      "title": "Method",
+      "type": "string"
+    },
+    "new_lesion_signal": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "New Lesion Signal"
+    },
+    "patient_id": {
+      "title": "Patient Id",
+      "type": "string"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "quality": {
+      "$ref": "#/$defs/QualityEvidence"
+    },
+    "reason_codes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "registration_status": {
+      "enum": [
+        "verified",
+        "assumed_same_grid",
+        "failed",
+        "unavailable"
+      ],
+      "title": "Registration Status",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "threshold_version": {
+      "title": "Threshold Version",
+      "type": "string"
+    },
+    "volume_change_pct": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Volume Change Pct"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "patient_id",
+    "baseline_date",
+    "followup_date",
+    "baseline_total_volume_ml",
+    "followup_total_volume_ml",
+    "volume_change_pct",
+    "baseline_lesion_count",
+    "followup_lesion_count",
+    "new_lesion_signal",
+    "matched_lesions",
+    "category",
+    "quality",
+    "registration_status",
+    "reason_codes",
+    "method",
+    "threshold_version",
+    "warnings"
+  ],
+  "title": "LongitudinalImagingEvidence",
+  "type": "object"
+}

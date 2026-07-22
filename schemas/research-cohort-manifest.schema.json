@@ -1,0 +1,267 @@
+{
+  "$defs": {
+    "IndexTreatment": {
+      "additionalProperties": false,
+      "properties": {
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "treatment_date": {
+          "format": "date",
+          "title": "Treatment Date",
+          "type": "string"
+        },
+        "treatment_type": {
+          "minLength": 1,
+          "title": "Treatment Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "treatment_date",
+        "treatment_type"
+      ],
+      "title": "IndexTreatment",
+      "type": "object"
+    },
+    "ResearchCase": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {
+          "$ref": "#/$defs/StudyReference"
+        },
+        "center_id": {
+          "minLength": 1,
+          "title": "Center Id",
+          "type": "string"
+        },
+        "followups": {
+          "items": {
+            "$ref": "#/$defs/StudyReference"
+          },
+          "minItems": 1,
+          "title": "Followups",
+          "type": "array"
+        },
+        "labs_file": {
+          "minLength": 1,
+          "title": "Labs File",
+          "type": "string"
+        },
+        "patient_id": {
+          "minLength": 1,
+          "title": "Patient Id",
+          "type": "string"
+        },
+        "treatment": {
+          "$ref": "#/$defs/IndexTreatment"
+        }
+      },
+      "required": [
+        "patient_id",
+        "center_id",
+        "treatment",
+        "baseline",
+        "followups",
+        "labs_file"
+      ],
+      "title": "ResearchCase",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    },
+    "StudyReference": {
+      "additionalProperties": false,
+      "properties": {
+        "ct_dir": {
+          "minLength": 1,
+          "title": "Ct Dir",
+          "type": "string"
+        },
+        "frame_of_reference_uid": {
+          "minLength": 1,
+          "title": "Frame Of Reference Uid",
+          "type": "string"
+        },
+        "phase": {
+          "title": "Phase",
+          "type": "string"
+        },
+        "registration_status": {
+          "default": "not_applicable",
+          "enum": [
+            "not_applicable",
+            "verified",
+            "failed",
+            "unavailable"
+          ],
+          "title": "Registration Status",
+          "type": "string"
+        },
+        "scanner_group": {
+          "default": "unknown",
+          "title": "Scanner Group",
+          "type": "string"
+        },
+        "seg_file": {
+          "minLength": 1,
+          "title": "Seg File",
+          "type": "string"
+        },
+        "seg_series_instance_uid": {
+          "minLength": 1,
+          "title": "Seg Series Instance Uid",
+          "type": "string"
+        },
+        "series_instance_uid": {
+          "minLength": 1,
+          "title": "Series Instance Uid",
+          "type": "string"
+        },
+        "study_date": {
+          "format": "date",
+          "title": "Study Date",
+          "type": "string"
+        },
+        "study_id": {
+          "minLength": 1,
+          "title": "Study Id",
+          "type": "string"
+        },
+        "study_instance_uid": {
+          "minLength": 1,
+          "title": "Study Instance Uid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "study_id",
+        "study_date",
+        "phase",
+        "ct_dir",
+        "seg_file",
+        "study_instance_uid",
+        "series_instance_uid",
+        "seg_series_instance_uid",
+        "frame_of_reference_uid"
+      ],
+      "title": "StudyReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/ResearchCase"
+      },
+      "minItems": 1,
+      "title": "Cases",
+      "type": "array"
+    },
+    "cohort_id": {
+      "minLength": 1,
+      "title": "Cohort Id",
+      "type": "string"
+    },
+    "data_root": {
+      "default": ".",
+      "title": "Data Root",
+      "type": "string"
+    },
+    "deidentified": {
+      "const": true,
+      "default": true,
+      "title": "Deidentified",
+      "type": "boolean"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "legal_research_use_confirmed": {
+      "const": true,
+      "default": true,
+      "title": "Legal Research Use Confirmed",
+      "type": "boolean"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "cohort_id",
+    "cases"
+  ],
+  "title": "ResearchCohortManifest",
+  "type": "object"
+}

@@ -1,0 +1,218 @@
+{
+  "$defs": {
+    "RuleTrace": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "explanation": {
+          "title": "Explanation",
+          "type": "string"
+        },
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "fired",
+            "not_fired",
+            "blocked"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "threshold_version": {
+          "title": "Threshold Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "status",
+        "evidence_refs",
+        "explanation",
+        "threshold_version"
+      ],
+      "title": "RuleTrace",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "conflicting_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Conflicting Evidence",
+      "type": "array"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "intended_use": {
+      "title": "Intended Use",
+      "type": "string"
+    },
+    "missing_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Evidence",
+      "type": "array"
+    },
+    "modality_concordance": {
+      "enum": [
+        "high",
+        "mixed",
+        "low",
+        "discordant",
+        "insufficient",
+        "unavailable",
+        "illustrative_only"
+      ],
+      "title": "Modality Concordance",
+      "type": "string"
+    },
+    "patient_id": {
+      "title": "Patient Id",
+      "type": "string"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "quality_status": {
+      "default": "warning",
+      "enum": [
+        "pass",
+        "warning",
+        "fail",
+        "unavailable"
+      ],
+      "title": "Quality Status",
+      "type": "string"
+    },
+    "reason_codes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "requires_clinician_review": {
+      "title": "Requires Clinician Review",
+      "type": "boolean"
+    },
+    "rule_traces": {
+      "items": {
+        "$ref": "#/$defs/RuleTrace"
+      },
+      "title": "Rule Traces",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "supporting_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Supporting Evidence",
+      "type": "array"
+    },
+    "threshold_version": {
+      "default": "fusion-v1",
+      "title": "Threshold Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "patient_id",
+    "state",
+    "modality_concordance",
+    "supporting_evidence",
+    "conflicting_evidence",
+    "missing_evidence",
+    "reason_codes",
+    "requires_clinician_review",
+    "intended_use"
+  ],
+  "title": "ClinicalVerdict",
+  "type": "object"
+}

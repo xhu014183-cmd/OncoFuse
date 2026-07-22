@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Callable, Protocol, cast
+from typing import Any, Callable, Literal, Protocol, cast
 import math
 
 import nibabel as nib
@@ -16,6 +16,12 @@ from .schemas import (
     QualityEvidence,
     QualityStatus,
     SourceReference,
+)
+from .visual_tokens import (
+    VisualTokenManifest,
+    VisualTokenOutput,
+    manifest_sources,
+    save_visual_tokens,
 )
 
 
@@ -329,6 +335,43 @@ def preprocess_m3d_volume(volume: VolumeInput) -> tuple[np.ndarray, dict[str, An
     return model_input, preprocessing, tuple(sorted(set(warnings)))
 
 
+def _infer_token_grid(patch_count: int) -> tuple[int, int, int] | None:
+    """Infer a pooled D,H,W grid while recording that it is not model-declared."""
+    if patch_count <= 0:
+        return None
+    candidates: list[tuple[float, tuple[int, int, int]]] = []
+    for depth in range(1, patch_count + 1):
+        if patch_count % depth:
+            continue
+        plane = patch_count // depth
+        for height in range(1, int(math.sqrt(plane)) + 1):
+            if plane % height:
+                continue
+            width = plane // height
+            for first, second in ((height, width), (width, height)):
+                score = (
+                    abs(math.log(max(first / depth, 1e-8) / 2.0))
+                    + abs(math.log(max(second / depth, 1e-8) / 2.0))
+                    + abs(math.log(max(first / second, 1e-8)))
+                )
+                candidates.append((score, (depth, first, second)))
+    return min(candidates, key=lambda item: (item[0], item[1]))[1] if candidates else None
+
+
+def _token_positions(
+    token_count: int,
+    grid_shape: tuple[int, int, int] | None,
+) -> np.ndarray:
+    positions = np.zeros((token_count, 3), dtype=np.float32)
+    positions[0] = -1.0
+    if grid_shape is None or math.prod(grid_shape) != token_count - 1:
+        return positions
+    axes = [np.linspace(-1.0, 1.0, size, dtype=np.float32) for size in grid_shape]
+    mesh = np.meshgrid(*axes, indexing="ij")
+    positions[1:] = np.stack(mesh, axis=-1).reshape(-1, 3)
+    return positions
+
+
 class M3DClipVolumeEncoder:
     name = "m3d-clip"
     model_name = M3D_MODEL_ID
@@ -388,7 +431,7 @@ class M3DClipVolumeEncoder:
             self._torch = torch
         return self._model, self._torch
 
-    def encode(self, volume: VolumeInput) -> EncodingResult:
+    def encode_tokens(self, volume: VolumeInput) -> VisualTokenOutput:
         model_input, preprocessing, warnings = preprocess_m3d_volume(volume)
         model, torch = self._load_model()
         tensor = torch.from_numpy(model_input).unsqueeze(0).to(
@@ -399,20 +442,54 @@ class M3DClipVolumeEncoder:
             tokens = model.encode_image(tensor)
         if tokens.ndim != 3 or tokens.shape[0] != 1 or tokens.shape[-1] != 768:
             raise RuntimeError(f"Unexpected M3D-CLIP output shape: {tuple(tokens.shape)}")
-        vector = tokens[0, 0].detach().float().cpu().numpy().astype(np.float32)
+        token_array = tokens[0].detach().float().cpu().numpy().astype(np.float32)
+        if not np.isfinite(token_array).all():
+            raise RuntimeError("M3D-CLIP visual tokens contain non-finite values")
+        vector = token_array[0]
+        vector_norm = float(np.linalg.norm(vector))
+        if not math.isfinite(vector_norm) or vector_norm <= 0:
+            raise RuntimeError("M3D-CLIP CLS token has an invalid norm")
+        global_embedding = vector / vector_norm
+        grid_shape = _infer_token_grid(token_array.shape[0] - 1)
+        positions = _token_positions(token_array.shape[0], grid_shape)
+        mapping: Literal["model_declared", "inferred", "unavailable"] = (
+            "inferred" if grid_shape is not None else "unavailable"
+        )
+        token_warnings = list(warnings)
+        token_warnings.append(
+            "Patch-token spatial coordinates are inferred from token count because the remote model does not expose a stable public grid contract"
+        )
         preprocessing = {
             **preprocessing,
             "model_input_shape_bcdhw": [1, 1, *M3D_TARGET_SHAPE],
-            "pooling": "CLS token from encode_image output",
+            "token_output_shape_nd": list(token_array.shape),
+            "token_grid_shape_dhw": list(grid_shape) if grid_shape is not None else None,
+            "pooling": "no pooling; complete encode_image token sequence retained",
             "device": self.device,
             "dtype": "float32",
         }
-        return EncodingResult(
-            vector=vector,
-            normalized=True,
+        return VisualTokenOutput(
+            tokens=token_array,
+            attention_mask=np.ones(token_array.shape[0], dtype=np.uint8),
+            global_embedding=global_embedding.astype(np.float32),
+            spatial_positions=positions,
+            spatial_mapping=mapping,
+            grid_shape=grid_shape,
             preprocessing=preprocessing,
+            warnings=tuple(sorted(set(token_warnings))),
+        )
+
+    def encode(self, volume: VolumeInput) -> EncodingResult:
+        token_output = self.encode_tokens(volume)
+        return EncodingResult(
+            vector=token_output.global_embedding,
+            normalized=True,
+            preprocessing={
+                **token_output.preprocessing,
+                "pooling": "CLS token retained for backward-compatible embedding artifact",
+            },
             mask_usage="mask is not consumed by M3D-CLIP; mask measurements remain a separate branch",
-            warnings=warnings,
+            warnings=token_output.warnings,
         )
 
 
@@ -528,3 +605,73 @@ def encode_nifti_volume(
         ],
     )
     return evidence, target
+
+
+def encode_nifti_visual_tokens(
+    image_path: str | Path,
+    mask_path: str | Path | None,
+    *,
+    patient_id: str,
+    study_date: str,
+    artifact_path: str | Path,
+    encoder_options: dict[str, Any] | None = None,
+    modality: str = "CT",
+    phase: str = "unknown",
+    timepoint: Literal["baseline", "followup", "single"] = "single",
+) -> tuple[VisualTokenManifest, Path]:
+    """Persist the complete M3D token sequence for a real 3D VLM connector."""
+    encoder = M3DClipVolumeEncoder(**(encoder_options or {}))
+    volume = _load_volume(image_path, mask_path, modality=modality, phase=phase)
+    output = encoder.encode_tokens(volume)
+    target, digest = save_visual_tokens(output, artifact_path)
+    warnings = list(output.warnings)
+    quality_status: QualityStatus = "warning" if warnings else "pass"
+    manifest = VisualTokenManifest(
+        source_evidence_id=f"{patient_id}:imaging:{study_date}:{phase}:{timepoint}",
+        patient_id=patient_id,
+        study_date=study_date,
+        phase=phase,
+        timepoint=timepoint,
+        encoder_name=encoder.name,
+        model_name=encoder.model_name,
+        model_revision=encoder.model_revision,
+        token_count=int(output.tokens.shape[0]),
+        hidden_size=int(output.tokens.shape[1]),
+        has_cls_token=True,
+        grid_shape_dhw=list(output.grid_shape) if output.grid_shape is not None else None,
+        spatial_mapping=output.spatial_mapping,
+        artifact_file=target.name,
+        artifact_sha256=digest,
+        artifact_arrays=[
+            "tokens",
+            "attention_mask",
+            "global_embedding",
+            "spatial_positions",
+        ],
+        preprocessing=output.preprocessing,
+        quality=QualityEvidence(
+            status=quality_status,
+            checks=[
+                QualityCheck(
+                    check_id="VISUAL_TOKENS_FINITE",
+                    status="pass",
+                    message=(
+                        f"Visual token sequence is finite with shape {output.tokens.shape}"
+                    ),
+                ),
+                QualityCheck(
+                    check_id="VISUAL_TOKEN_MASK",
+                    status="pass",
+                    message="Every emitted visual token is marked available",
+                ),
+            ],
+            warnings=warnings,
+        ),
+        warnings=warnings,
+        intended_use=(
+            "research alignment of frozen M3D-CLIP tokens with a frozen language model; "
+            "not a validated diagnostic representation"
+        ),
+        sources=manifest_sources(image_path),
+    )
+    return manifest, target

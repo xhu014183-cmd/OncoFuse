@@ -1,0 +1,660 @@
+{
+  "$defs": {
+    "ClinicalAnalyteEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "analyte": {
+          "title": "Analyte",
+          "type": "string"
+        },
+        "baseline_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Baseline Value"
+        },
+        "group": {
+          "enum": [
+            "tumor_marker",
+            "liver_reserve",
+            "liver_injury",
+            "viral_etiology"
+          ],
+          "title": "Group",
+          "type": "string"
+        },
+        "latest_above_reference": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Latest Above Reference"
+        },
+        "latest_unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Latest Unit"
+        },
+        "latest_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Latest Value"
+        },
+        "log_slope_per_day": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Log Slope Per Day"
+        },
+        "nadir_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Nadir Ratio"
+        },
+        "nadir_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Nadir Value"
+        },
+        "observations": {
+          "items": {
+            "$ref": "#/$defs/ClinicalLabObservation"
+          },
+          "title": "Observations",
+          "type": "array"
+        },
+        "rebound_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rebound Ratio"
+        },
+        "trajectory_state": {
+          "enum": [
+            "insufficient",
+            "stable_normal",
+            "stable_abnormal",
+            "falling_after_treatment",
+            "plateau_after_treatment",
+            "rebound_after_nadir",
+            "persistent_rising",
+            "discordant_markers"
+          ],
+          "title": "Trajectory State",
+          "type": "string"
+        },
+        "uncertainty": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Uncertainty",
+          "type": "array"
+        }
+      },
+      "required": [
+        "analyte",
+        "group",
+        "observations",
+        "latest_value",
+        "latest_unit",
+        "latest_above_reference",
+        "baseline_value",
+        "nadir_value",
+        "trajectory_state",
+        "log_slope_per_day",
+        "nadir_ratio",
+        "rebound_ratio"
+      ],
+      "title": "ClinicalAnalyteEvidence",
+      "type": "object"
+    },
+    "ClinicalLabObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "above_reference": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Above Reference"
+        },
+        "analyte": {
+          "title": "Analyte",
+          "type": "string"
+        },
+        "comparator": {
+          "default": "eq",
+          "enum": [
+            "eq",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ],
+          "title": "Comparator",
+          "type": "string"
+        },
+        "group": {
+          "enum": [
+            "tumor_marker",
+            "liver_reserve",
+            "liver_injury",
+            "viral_etiology"
+          ],
+          "title": "Group",
+          "type": "string"
+        },
+        "observed_at": {
+          "title": "Observed At",
+          "type": "string"
+        },
+        "original_unit": {
+          "title": "Original Unit",
+          "type": "string"
+        },
+        "parse_status": {
+          "enum": [
+            "exact",
+            "censored",
+            "missing",
+            "invalid",
+            "unsupported_unit",
+            "ambiguous"
+          ],
+          "title": "Parse Status",
+          "type": "string"
+        },
+        "quality_status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Quality Status",
+          "type": "string"
+        },
+        "reference_high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference High"
+        },
+        "reference_low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Low"
+        },
+        "source_span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_text": {
+          "title": "Source Text",
+          "type": "string"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "observed_at",
+        "analyte",
+        "group",
+        "value",
+        "unit",
+        "original_unit",
+        "parse_status",
+        "source_text",
+        "source_span",
+        "quality_status"
+      ],
+      "title": "ClinicalLabObservation",
+      "type": "object"
+    },
+    "LiverReserveEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "albi_grade": {
+          "anyOf": [
+            {
+              "maximum": 3,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Albi Grade"
+        },
+        "albi_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Albi Score"
+        },
+        "child_pugh_grade": {
+          "anyOf": [
+            {
+              "enum": [
+                "A",
+                "B",
+                "C"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Child Pugh Grade"
+        },
+        "child_pugh_score": {
+          "anyOf": [
+            {
+              "maximum": 15,
+              "minimum": 5,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Child Pugh Score"
+        },
+        "child_pugh_status": {
+          "default": "unavailable",
+          "enum": [
+            "full",
+            "partial",
+            "unavailable"
+          ],
+          "title": "Child Pugh Status",
+          "type": "string"
+        },
+        "missing_components": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Components",
+          "type": "array"
+        }
+      },
+      "title": "LiverReserveEvidence",
+      "type": "object"
+    },
+    "QualityCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check_id",
+        "status",
+        "message"
+      ],
+      "title": "QualityCheck",
+      "type": "object"
+    },
+    "QualityEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/QualityCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Errors",
+          "type": "array"
+        },
+        "image_mask_aligned": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Mask Aligned"
+        },
+        "spacing_mm": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Spacing Mm",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warning",
+            "fail",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "QualityEvidence",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    },
+    "SourceSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "exclusiveMinimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "SourceSpan",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "analytes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ClinicalAnalyteEvidence"
+      },
+      "title": "Analytes",
+      "type": "object"
+    },
+    "confounders": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Confounders",
+      "type": "array"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "liver_injury_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Liver Injury Evidence",
+      "type": "array"
+    },
+    "liver_reserve_evidence": {
+      "$ref": "#/$defs/LiverReserveEvidence"
+    },
+    "missing_items": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Items",
+      "type": "array"
+    },
+    "patient_id": {
+      "title": "Patient Id",
+      "type": "string"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "provenance": {
+      "additionalProperties": true,
+      "title": "Provenance",
+      "type": "object"
+    },
+    "quality": {
+      "$ref": "#/$defs/QualityEvidence"
+    },
+    "rejected_observations": {
+      "items": {
+        "$ref": "#/$defs/ClinicalLabObservation"
+      },
+      "title": "Rejected Observations",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_format": {
+      "enum": [
+        "text",
+        "json",
+        "csv"
+      ],
+      "title": "Source Format",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "tumor_marker_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tumor Marker Evidence",
+      "type": "array"
+    },
+    "viral_etiology_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Viral Etiology Evidence",
+      "type": "array"
+    }
+  },
+  "required": [
+    "patient_id",
+    "source_format",
+    "analytes",
+    "rejected_observations",
+    "tumor_marker_evidence",
+    "liver_reserve_evidence",
+    "liver_injury_evidence",
+    "viral_etiology_evidence",
+    "confounders",
+    "missing_items",
+    "quality",
+    "provenance"
+  ],
+  "title": "ClinicalLabEvidence",
+  "type": "object"
+}

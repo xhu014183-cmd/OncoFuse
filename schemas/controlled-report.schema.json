@@ -1,0 +1,143 @@
+{
+  "$defs": {
+    "ControlledAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "concordance": {
+          "title": "Concordance",
+          "type": "string"
+        },
+        "conflicting_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Conflicting Evidence",
+          "type": "array"
+        },
+        "missing_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Evidence",
+          "type": "array"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "supporting_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Supporting Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "state",
+        "concordance",
+        "summary",
+        "supporting_evidence",
+        "conflicting_evidence",
+        "missing_evidence"
+      ],
+      "title": "ControlledAssessment",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "case_id": {
+      "title": "Case Id",
+      "type": "string"
+    },
+    "data_quality_status": {
+      "enum": [
+        "pass",
+        "warning",
+        "fail",
+        "unavailable"
+      ],
+      "title": "Data Quality Status",
+      "type": "string"
+    },
+    "data_scope": {
+      "title": "Data Scope",
+      "type": "string"
+    },
+    "disclaimer": {
+      "const": "Research use only; not for diagnosis, staging, prognosis, or treatment decisions.",
+      "title": "Disclaimer",
+      "type": "string"
+    },
+    "imaging_summary": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 2,
+      "title": "Imaging Summary",
+      "type": "array"
+    },
+    "intended_use": {
+      "title": "Intended Use",
+      "type": "string"
+    },
+    "laboratory_summary": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Laboratory Summary",
+      "type": "array"
+    },
+    "multimodal_assessment": {
+      "$ref": "#/$defs/ControlledAssessment"
+    },
+    "quality_and_limits": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Quality And Limits",
+      "type": "array"
+    },
+    "report_type": {
+      "title": "Report Type",
+      "type": "string"
+    },
+    "review_required": {
+      "title": "Review Required",
+      "type": "boolean"
+    },
+    "scenario_id": {
+      "title": "Scenario Id",
+      "type": "string"
+    },
+    "uncertainty": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Uncertainty",
+      "type": "array"
+    }
+  },
+  "required": [
+    "case_id",
+    "scenario_id",
+    "report_type",
+    "data_scope",
+    "imaging_summary",
+    "laboratory_summary",
+    "multimodal_assessment",
+    "uncertainty",
+    "data_quality_status",
+    "quality_and_limits",
+    "review_required",
+    "intended_use",
+    "disclaimer"
+  ],
+  "title": "ControlledReport",
+  "type": "object"
+}

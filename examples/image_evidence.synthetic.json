@@ -1,0 +1,19 @@
+{
+  "patient_id": "RESEARCH_001",
+  "study_date": "2026-07-20",
+  "modality": "CT",
+  "phase": "portal_venous",
+  "source_tool": "existing-image-to-text",
+  "source_version": "demo-1",
+  "findings": [
+    {
+      "finding_id": "F1",
+      "location": "liver_S6",
+      "observation": "可见低密度区域，当前仅作定性观察",
+      "confidence": "moderate",
+      "source_ref": "series-2/slice-46"
+    }
+  ],
+  "reported_lesion_count": 1,
+  "limitations": ["图像文字工具本身不提供分割定量，体积以外部 SEG 程序测量为准"]
+}

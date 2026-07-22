@@ -1,0 +1,199 @@
+{
+  "$defs": {
+    "AdjudicationRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "adjudicator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AdjudicationReview"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "final_label": {
+          "enum": [
+            "progression",
+            "no_progression",
+            "indeterminate"
+          ],
+          "title": "Final Label",
+          "type": "string"
+        },
+        "patient_id": {
+          "title": "Patient Id",
+          "type": "string"
+        },
+        "reviewers": {
+          "items": {
+            "$ref": "#/$defs/AdjudicationReview"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Reviewers",
+          "type": "array"
+        },
+        "study_id": {
+          "title": "Study Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "patient_id",
+        "study_id",
+        "reviewers",
+        "final_label"
+      ],
+      "title": "AdjudicationRecord",
+      "type": "object"
+    },
+    "AdjudicationReview": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "enum": [
+            "progression",
+            "no_progression",
+            "indeterminate"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "reviewed_at": {
+          "format": "date-time",
+          "title": "Reviewed At",
+          "type": "string"
+        },
+        "reviewer_id_hash": {
+          "minLength": 8,
+          "title": "Reviewer Id Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reviewer_id_hash",
+        "label",
+        "reason_codes",
+        "reviewed_at"
+      ],
+      "title": "AdjudicationReview",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cohort_id": {
+      "title": "Cohort Id",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/AdjudicationRecord"
+      },
+      "title": "Records",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope": {
+      "enum": [
+        "development",
+        "external_test"
+      ],
+      "title": "Scope",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "cohort_id",
+    "scope",
+    "records"
+  ],
+  "title": "AdjudicationSet",
+  "type": "object"
+}

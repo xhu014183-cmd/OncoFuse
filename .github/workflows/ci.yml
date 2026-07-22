@@ -35,6 +35,12 @@ jobs:
           hcc-demo validate-json --type research-protocol --input examples/research_protocol.template.json
           hcc-demo validate-json --type research-cohort-manifest --input examples/research_manifest.template.json
           hcc-demo validate-json --type adjudication-set --input examples/adjudications.template.json
+      - name: Run three-line text stages
+        run: |
+          hcc-demo parse-labs --input examples/lab_report.synthetic.txt --patient-id RESEARCH_001 --output three-line/labs.json
+          hcc-demo parse-hpi --input examples/hpi.synthetic.txt --patient-id RESEARCH_001 --labs three-line/labs.json --output three-line/timeline.json
+          hcc-demo validate-json --type clinical-lab-evidence --input three-line/labs.json
+          hcc-demo validate-json --type hpi-timeline-evidence --input three-line/timeline.json
       - name: Run synthetic end-to-end demo
         run: hcc-demo run-demo --output demo-output
       - name: Validate end-to-end artifacts

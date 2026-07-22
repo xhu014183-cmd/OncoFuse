@@ -7,11 +7,22 @@ from typing import Literal
 import json
 
 from .contracts import DATA_ORIGINS, PAIRING_STATUSES, build_multimodal_case_evidence
+from .case_models import (
+    CaseResearchSummary,
+    ClinicalLabEvidence,
+    HpiTimelineEvidence,
+    ImagingInterpretationEvidence,
+)
+from .case_llm import render_with_optional_llm
+from .case_summary import summarize_case
+from .clinical_labs import parse_laboratory_report
 from .fusion import fuse_cross_sectional_evidence, fuse_evidence
 from .deepseek import run_deepseek_audit
 from .evaluation import EvaluationCohort, evaluate_cohort_file
 from .imaging import compare_imaging, measure_nifti
+from .imaging_adapter import parse_imaging_study
 from .labs import load_lab_evidence
+from .hpi import parse_hpi_timeline
 from .preview import create_overlay_montage
 from .prompting import build_report_prompt, write_prompt_bundle
 from .research_cohort import build_research_cohort, validate_research_cohort
@@ -45,6 +56,7 @@ from .tcia import (
     write_composite_labs,
 )
 from .volume_encoders import available_volume_encoders, encode_nifti_volume
+from .vlm_skeleton import run_skeleton_demo
 
 
 def _schema_models() -> dict[str, type[JsonModel]]:
@@ -63,6 +75,10 @@ def _schema_models() -> dict[str, type[JsonModel]]:
         "research-run-manifest": ResearchRunManifest,
         "adjudication-set": AdjudicationSet,
         "research-evaluation": ResearchEvaluationArtifact,
+        "imaging-interpretation-evidence": ImagingInterpretationEvidence,
+        "clinical-lab-evidence": ClinicalLabEvidence,
+        "hpi-timeline-evidence": HpiTimelineEvidence,
+        "case-research-summary": CaseResearchSummary,
     }
 
 
@@ -436,6 +452,35 @@ def _add_encoder_arguments(
     )
 
 
+def _write_three_line_outputs(
+    *,
+    imaging: ImagingInterpretationEvidence,
+    labs: ClinicalLabEvidence,
+    timeline: HpiTimelineEvidence | None,
+    output: str | Path,
+    llm_response: str | Path | None = None,
+) -> tuple[Path, Path]:
+    target = Path(output)
+    target.mkdir(parents=True, exist_ok=True)
+    imaging_path = target / "imaging.json"
+    labs_path = target / "labs.json"
+    imaging.write_json(imaging_path)
+    labs.write_json(labs_path)
+    if timeline is not None:
+        timeline.write_json(target / "timeline.json")
+    summary = summarize_case(imaging, labs, timeline)
+    summary_path = target / "case-summary.json"
+    summary.write_json(summary_path)
+    raw_response = Path(llm_response).read_text(encoding="utf-8") if llm_response else None
+    markdown, audit = render_with_optional_llm(summary, raw_response)
+    if llm_response:
+        audit["response_source"] = Path(llm_response).name
+        audit["raw_response"] = raw_response
+    (target / "case-summary.md").write_text(markdown, encoding="utf-8")
+    (target / "report-audit.json").write_text(json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return summary_path, target / "case-summary.md"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="HCC multimodal evidence demo")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -580,6 +625,61 @@ def main() -> None:
         action="store_true",
         help="Explicitly authorize one external-test label access in this output directory",
     )
+    parse_imaging = subparsers.add_parser("parse-imaging", help="Validate a CT/MR DICOM series and optional SEG")
+    parse_imaging.add_argument("--dicom-dir", required=True)
+    parse_imaging.add_argument("--seg", default=None)
+    parse_imaging.add_argument("--image-evidence", default=None)
+    parse_imaging.add_argument("--patient-id", required=True)
+    parse_imaging.add_argument("--phase", default=None)
+    parse_imaging.add_argument("--output", required=True)
+    parse_labs = subparsers.add_parser("parse-labs", help="Parse TXT, JSON, or CSV laboratory evidence")
+    parse_labs.add_argument("--input", required=True)
+    parse_labs.add_argument("--patient-id", required=True)
+    parse_labs.add_argument("--output", required=True)
+    parse_hpi = subparsers.add_parser("parse-hpi", help="Extract a deterministic HPI timeline")
+    parse_hpi.add_argument("--input", required=True)
+    parse_hpi.add_argument("--patient-id", required=True)
+    parse_hpi.add_argument("--labs", default=None)
+    parse_hpi.add_argument("--imaging", default=None)
+    parse_hpi.add_argument("--index-date", default=None, help="Optional ISO cutoff; later events are excluded")
+    parse_hpi.add_argument("--output", required=True)
+    summarize = subparsers.add_parser("summarize-case", help="Fuse validated imaging, labs, and HPI artifacts")
+    summarize.add_argument("--imaging", required=True)
+    summarize.add_argument("--labs", required=True)
+    summarize.add_argument("--timeline", default=None)
+    summarize.add_argument("--llm-response", default=None, help="Optional offline JSON rewrite to validate; external LLM calls remain disabled")
+    summarize.add_argument("--output", required=True)
+    analyze_case = subparsers.add_parser("analyze-case", help="Run all three CPU-friendly evidence lines")
+    analyze_case.add_argument("--dicom-dir", required=True)
+    analyze_case.add_argument("--seg", default=None)
+    analyze_case.add_argument("--image-evidence", default=None)
+    analyze_case.add_argument("--labs", required=True)
+    analyze_case.add_argument("--hpi", default=None)
+    analyze_case.add_argument("--patient-id", required=True)
+    analyze_case.add_argument("--phase", default=None)
+    analyze_case.add_argument("--llm-response", default=None, help="Optional offline JSON rewrite to validate; external LLM calls remain disabled")
+    analyze_case.add_argument("--output", required=True)
+    vlm_skeleton = subparsers.add_parser(
+        "vlm-skeleton",
+        help="Run a CPU-only patch extraction and mock VLM demonstration",
+    )
+    vlm_skeleton.add_argument("--image", required=True, help="JPG/PNG image or 3D NIfTI volume")
+    vlm_skeleton.add_argument("--hpi", default="", help="Optional HPI text")
+    vlm_skeleton.add_argument("--labs", default="", help="Optional laboratory report text")
+    vlm_skeleton.add_argument("--output", required=True)
+    vlm_skeleton.add_argument(
+        "--patch-size",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Optional patch dimensions: H W for images, or D H W for NIfTI",
+    )
+    vlm_web = subparsers.add_parser(
+        "vlm-skeleton-web",
+        help="Launch the local static browser UI for the patch-based mock VLM demo",
+    )
+    vlm_web.add_argument("--port", type=int, default=7860)
+    vlm_web.add_argument("--share", action="store_true")
     args = parser.parse_args()
 
     if args.command == "generate":
@@ -750,6 +850,51 @@ def main() -> None:
         )
         print(f"Wrote {result_path}")
         print(result_path.read_text(encoding="utf-8"))
+    elif args.command == "parse-imaging":
+        imaging_result = parse_imaging_study(args.dicom_dir, patient_id=args.patient_id, seg_path=args.seg, image_evidence_path=args.image_evidence, phase=args.phase, output_dir=Path(args.output).parent / ".imaging-work")
+        imaging_result.write_json(args.output)
+        print(f"Wrote {args.output}")
+    elif args.command == "parse-labs":
+        labs_result = parse_laboratory_report(args.input, patient_id=args.patient_id)
+        labs_result.write_json(args.output)
+        print(f"Wrote {args.output}")
+    elif args.command == "parse-hpi":
+        hpi_labs = ClinicalLabEvidence.model_validate_json(Path(args.labs).read_text(encoding="utf-8")) if args.labs else None
+        hpi_imaging = ImagingInterpretationEvidence.model_validate_json(Path(args.imaging).read_text(encoding="utf-8")) if args.imaging else None
+        hpi_result = parse_hpi_timeline(args.input, patient_id=args.patient_id, labs=hpi_labs, imaging=hpi_imaging, index_date=args.index_date)
+        hpi_result.write_json(args.output)
+        print(f"Wrote {args.output}")
+    elif args.command == "summarize-case":
+        summary_imaging = ImagingInterpretationEvidence.model_validate_json(Path(args.imaging).read_text(encoding="utf-8"))
+        summary_labs = ClinicalLabEvidence.model_validate_json(Path(args.labs).read_text(encoding="utf-8"))
+        summary_timeline = HpiTimelineEvidence.model_validate_json(Path(args.timeline).read_text(encoding="utf-8")) if args.timeline else None
+        summary_path, markdown_path = _write_three_line_outputs(imaging=summary_imaging, labs=summary_labs, timeline=summary_timeline, output=args.output, llm_response=args.llm_response)
+        print(f"Wrote {summary_path}")
+        print(f"Wrote {markdown_path}")
+    elif args.command == "analyze-case":
+        imaging = parse_imaging_study(args.dicom_dir, patient_id=args.patient_id, seg_path=args.seg, image_evidence_path=args.image_evidence, phase=args.phase, output_dir=args.output)
+        labs = parse_laboratory_report(args.labs, patient_id=args.patient_id)
+        timeline = parse_hpi_timeline(args.hpi, patient_id=args.patient_id, labs=labs, imaging=imaging, index_date=imaging.study_date if imaging.study_date != "unknown" else None) if args.hpi else None
+        summary_path, markdown_path = _write_three_line_outputs(imaging=imaging, labs=labs, timeline=timeline, output=args.output, llm_response=args.llm_response)
+        print(f"Wrote {summary_path}")
+        print(f"Wrote {markdown_path}")
+    elif args.command == "vlm-skeleton":
+        patch_size = tuple(args.patch_size) if args.patch_size else None
+        manifest, report, report_path = run_skeleton_demo(
+            args.image,
+            args.output,
+            hpi=args.hpi,
+            labs=args.labs,
+            patch_size=patch_size,
+        )
+        print(f"Wrote {Path(args.output) / 'patch-manifest.json'}")
+        print(f"Wrote {Path(args.output) / 'patch-grid.png'}")
+        print(f"Wrote {report_path}")
+        print(report.to_json())
+    elif args.command == "vlm-skeleton-web":
+        from .vlm_skeleton_web import launch_demo
+
+        launch_demo(port=args.port, share=args.share)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,356 @@
+{
+  "$defs": {
+    "FollowupRunRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_directory": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artifact Directory"
+        },
+        "days_after_treatment": {
+          "title": "Days After Treatment",
+          "type": "integer"
+        },
+        "disposition": {
+          "enum": [
+            "included",
+            "excluded",
+            "failed",
+            "indeterminate"
+          ],
+          "title": "Disposition",
+          "type": "string"
+        },
+        "fusion_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fusion State"
+        },
+        "image_only_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Only Score"
+        },
+        "imaging_category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Imaging Category"
+        },
+        "lab_only_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lab Only Score"
+        },
+        "lab_signal_count": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lab Signal Count"
+        },
+        "missing_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Reasons",
+          "type": "array"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "rule_fusion_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rule Fusion Score"
+        },
+        "scanner_group": {
+          "title": "Scanner Group",
+          "type": "string"
+        },
+        "study_date": {
+          "format": "date",
+          "title": "Study Date",
+          "type": "string"
+        },
+        "study_id": {
+          "title": "Study Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "study_id",
+        "study_date",
+        "days_after_treatment",
+        "scanner_group",
+        "disposition",
+        "reason_codes"
+      ],
+      "title": "FollowupRunRecord",
+      "type": "object"
+    },
+    "ResearchCaseRun": {
+      "additionalProperties": false,
+      "properties": {
+        "center_id": {
+          "title": "Center Id",
+          "type": "string"
+        },
+        "disposition": {
+          "enum": [
+            "included",
+            "excluded",
+            "failed",
+            "indeterminate"
+          ],
+          "title": "Disposition",
+          "type": "string"
+        },
+        "followups": {
+          "items": {
+            "$ref": "#/$defs/FollowupRunRecord"
+          },
+          "title": "Followups",
+          "type": "array"
+        },
+        "patient_id": {
+          "title": "Patient Id",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "split": {
+          "enum": [
+            "development",
+            "external_test"
+          ],
+          "title": "Split",
+          "type": "string"
+        },
+        "treatment_date": {
+          "format": "date",
+          "title": "Treatment Date",
+          "type": "string"
+        },
+        "treatment_type": {
+          "title": "Treatment Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "patient_id",
+        "center_id",
+        "split",
+        "treatment_date",
+        "treatment_type",
+        "disposition",
+        "reason_codes",
+        "followups"
+      ],
+      "title": "ResearchCaseRun",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/ResearchCaseRun"
+      },
+      "title": "Cases",
+      "type": "array"
+    },
+    "cohort_id": {
+      "title": "Cohort Id",
+      "type": "string"
+    },
+    "configuration_hash": {
+      "title": "Configuration Hash",
+      "type": "string"
+    },
+    "counts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Counts",
+      "type": "object"
+    },
+    "external_test_center_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "External Test Center Ids",
+      "type": "array"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "git_commit": {
+      "title": "Git Commit",
+      "type": "string"
+    },
+    "label_data_loaded": {
+      "const": false,
+      "default": false,
+      "title": "Label Data Loaded",
+      "type": "boolean"
+    },
+    "manifest_hash": {
+      "title": "Manifest Hash",
+      "type": "string"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "protocol_hash": {
+      "title": "Protocol Hash",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "cohort_id",
+    "protocol_hash",
+    "manifest_hash",
+    "configuration_hash",
+    "git_commit",
+    "external_test_center_ids",
+    "cases",
+    "counts"
+  ],
+  "title": "ResearchRunManifest",
+  "type": "object"
+}

@@ -1,5 +1,7 @@
 # HCC Multimodal Research Prototype
 
+[中文说明](README.zh-CN.md) | English
+
 This repository is an auditable research prototype for combining segmented 3D
 liver imaging with longitudinal AFP/DCP evidence. It is designed to fail
 closed when geometry, units, pairing, registration, or report safety cannot be
@@ -199,6 +201,33 @@ Formal evaluation uses 2000 patient-level paired bootstrap samples and never
 calls an LLM. See [docs/REAL_COHORT_VALIDATION.md](docs/REAL_COHORT_VALIDATION.md)
 for the directory boundary, endpoint rules, and expected outputs.
 
+## CPU 三线病例分析 (pipeline 0.4.0)
+
+新入口把一次 CT/MRI 检查、可选 SEG、现有图像转文字结果、检验报告和病程文本整理成同一份研究证据摘要。它只计算可追溯的观察、检验异常和时间趋势，不输出诊断、分期、预后或治疗建议；不安装模型权重也可以运行。
+
+```powershell
+python examples\generate_dicom_seg_fixture.py --output synthetic-case
+.\.venv\Scripts\hcc-demo analyze-case `
+  --dicom-dir synthetic-case\study `
+  --seg synthetic-case\seg.dcm `
+  --image-evidence examples\image_evidence.synthetic.json `
+  --labs examples\lab_report.synthetic.txt `
+  --hpi examples\hpi.synthetic.txt `
+  --patient-id RESEARCH_001 `
+  --output case-output
+```
+
+输出目录包含 `imaging.json`、`labs.json`、可选的 `timeline.json`、`case-summary.json` 和 `case-summary.md`。三个调试入口也可以分别运行：
+
+```powershell
+.\.venv\Scripts\hcc-demo parse-imaging --dicom-dir study --patient-id RESEARCH_001 --output imaging.json
+.\.venv\Scripts\hcc-demo parse-labs --input examples\lab_report.synthetic.txt --patient-id RESEARCH_001 --output labs.json
+.\.venv\Scripts\hcc-demo parse-hpi --input examples\hpi.synthetic.txt --patient-id RESEARCH_001 --labs labs.json --output timeline.json
+.\.venv\Scripts\hcc-demo summarize-case --imaging imaging.json --labs labs.json --timeline timeline.json --output case-output
+```
+
+影像线优先使用程序完成 DICOM 几何和 SEG 物理测量；没有 SEG 时只保留图像工具提供的定性观察。检验线支持 TXT/JSON/CSV、科学计数法、比较符、单位转换、参考范围和 AFP/DCP/AFP-L3、肝储备、肝损伤、病毒学项目。HPI 线按日期合并治疗、影像和检验事件，输出 `falling_after_treatment`、`rebound_after_nadir`、`persistent_rising` 等确定性状态。外部 LLM 默认关闭，即使将来启用也只能改写已锁定 JSON。
+
 ## Public schemas
 
 ```powershell
@@ -208,8 +237,9 @@ for the directory boundary, endpoint rules, and expected outputs.
   --input demo-output\clinical_verdict.json
 ```
 
-Schema 1.0 remains current. Pipeline 0.3 adds cohort artifacts without
-invalidating valid 0.2 schema-1.0 artifacts. See [MIGRATION.md](MIGRATION.md).
+Schema 1.0 remains current. Pipeline 0.4 adds the three-line case artifacts
+without invalidating valid 0.2/0.3 schema-1.0 artifacts. See
+[MIGRATION.md](MIGRATION.md).
 
 ## Optional 3D encoders
 

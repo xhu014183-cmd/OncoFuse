@@ -1,0 +1,266 @@
+{
+  "$defs": {
+    "CohortRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline_date": {
+          "title": "Baseline Date",
+          "type": "string"
+        },
+        "center": {
+          "title": "Center",
+          "type": "string"
+        },
+        "endpoint_label": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Endpoint Label",
+          "type": "integer"
+        },
+        "followup_date": {
+          "title": "Followup Date",
+          "type": "string"
+        },
+        "image_only_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Only Score"
+        },
+        "lab_only_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lab Only Score"
+        },
+        "missing_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Reasons",
+          "type": "array"
+        },
+        "patient_id": {
+          "title": "Patient Id",
+          "type": "string"
+        },
+        "rule_fusion_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rule Fusion Score"
+        },
+        "scanner_group": {
+          "default": "unknown",
+          "title": "Scanner Group",
+          "type": "string"
+        },
+        "split": {
+          "enum": [
+            "train",
+            "validation",
+            "test"
+          ],
+          "title": "Split",
+          "type": "string"
+        },
+        "treatment_events": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Treatment Events",
+          "type": "array"
+        }
+      },
+      "required": [
+        "patient_id",
+        "split",
+        "center",
+        "baseline_date",
+        "followup_date",
+        "endpoint_label"
+      ],
+      "title": "CohortRecord",
+      "type": "object"
+    },
+    "EvaluationEndpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "followup_window_days": {
+          "exclusiveMinimum": 0,
+          "title": "Followup Window Days",
+          "type": "integer"
+        },
+        "name": {
+          "const": "radiographic_progression_within_followup_window",
+          "title": "Name",
+          "type": "string"
+        },
+        "positive_label": {
+          "title": "Positive Label",
+          "type": "string"
+        },
+        "preregistration_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preregistration Id"
+        }
+      },
+      "required": [
+        "name",
+        "followup_window_days",
+        "positive_label"
+      ],
+      "title": "EvaluationEndpoint",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "data_origin": {
+          "default": "unknown",
+          "title": "Data Origin",
+          "type": "string"
+        },
+        "deidentified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deidentified"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cohort_id": {
+      "title": "Cohort Id",
+      "type": "string"
+    },
+    "endpoint": {
+      "$ref": "#/$defs/EvaluationEndpoint"
+    },
+    "exclusion_criteria": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Exclusion Criteria",
+      "type": "array"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "inclusion_criteria": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Inclusion Criteria",
+      "type": "array"
+    },
+    "pipeline_version": {
+      "default": "0.4.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/CohortRecord"
+      },
+      "title": "Records",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceReference"
+      },
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "cohort_id",
+    "endpoint",
+    "inclusion_criteria",
+    "exclusion_criteria",
+    "records"
+  ],
+  "title": "EvaluationCohort",
+  "type": "object"
+}
