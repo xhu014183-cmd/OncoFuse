@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HCC 多模态 VLM Demo — 影像 × 检验融合演示</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #2b3342;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #f0883e;
+    --up: #f85149;      /* 升高/异常：红（中国习惯） */
+    --ok: #3fb950;
+    --warn: #d29922;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 24px 48px; }
+
+  /* ===== Header ===== */
+  header.top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+    padding: 18px 0 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .title-block h1 { font-size: 20px; margin: 0 0 4px; font-weight: 650; }
+  .title-block .sub { color: var(--muted); font-size: 12.5px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-size: 11.5px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted);
+    background: var(--panel);
+  }
+  .badge.blue  { color: var(--accent);  border-color: rgba(88,166,255,.4); }
+  .badge.amber { color: var(--warn);    border-color: rgba(210,153,34,.45); }
+  .badge.red   { color: var(--up);      border-color: rgba(248,81,73,.45); }
+
+  /* ===== Layout ===== */
+  .grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .card h2 {
+    margin: 0; padding: 12px 16px;
+    font-size: 13.5px; font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel-2);
+  }
+  .card h2 .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .card .body { padding: 16px; }
+
+  /* ===== Imaging panel ===== */
+  .ct-frame { position: relative; background: #000; border-radius: 8px; overflow: hidden; }
+  .ct-frame img { display: block; width: 100%; height: auto; }
+  .ct-caption {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 10px; color: var(--muted); font-size: 12px; flex-wrap: wrap; gap: 8px;
+  }
+  .lesion-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font-family: var(--mono); font-size: 11px;
+    padding: 2px 8px; border-radius: 6px;
+    background: rgba(248,81,73,.14); color: #ffa198;
+    border: 1px solid rgba(248,81,73,.35);
+  }
+  .chip.seg { background: rgba(248,81,73,.14); color: #ff7b72; }
+  .legend { display: flex; gap: 14px; align-items: center; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  /* ===== Pipeline ===== */
+  .pipeline { display: flex; align-items: stretch; gap: 0; margin-bottom: 16px; }
+  .step {
+    flex: 1; text-align: center; padding: 10px 6px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    font-size: 12px; color: var(--muted); position: relative;
+  }
+  .step:first-child { border-radius: 8px 0 0 8px; }
+  .step:last-child  { border-radius: 0 8px 8px 0; }
+  .step b { display: block; color: var(--fg); font-size: 12.5px; margin-bottom: 2px; }
+  .step .num {
+    display: inline-block; width: 18px; height: 18px; line-height: 18px;
+    border-radius: 50%; background: var(--accent); color: #04121f;
+    font-weight: 700; font-size: 11px; margin-bottom: 4px;
+  }
+  .step:not(:last-child)::after {
+    content: "›"; position: absolute; right: -7px; top: 50%;
+    transform: translateY(-50%); z-index: 2;
+    color: var(--accent); font-size: 18px; font-weight: 700;
+  }
+
+  /* ===== Metric tiles ===== */
+  .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .metric {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .metric .k { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+  .metric .v { font-size: 20px; font-weight: 650; font-family: var(--mono); }
+  .metric .d { font-size: 11.5px; margin-top: 2px; }
+  .up   { color: var(--up); }
+  .ok   { color: var(--ok); }
+  .dim  { color: var(--muted); }
+
+  /* ===== VLM reasoning console ===== */
+  .console {
+    background: #0a0e14; border: 1px solid var(--border); border-radius: 10px;
+    font-family: var(--mono); font-size: 12.5px; padding: 14px 16px;
+    max-height: 340px; overflow-y: auto;
+  }
+  .console .line { margin: 0 0 6px; white-space: pre-wrap; word-break: break-word; }
+  .console .tag { color: var(--accent); }
+  .console .tag2 { color: var(--accent-2); }
+  .console .ok  { color: var(--ok); }
+  .console .bad { color: var(--up); }
+  .console .cur { display: inline-block; width: 8px; height: 14px; background: var(--accent);
+                  vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ===== Lab chart ===== */
+  .chart-wrap { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .chart-title { font-size: 12.5px; font-weight: 600; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: baseline; }
+  .chart-title .ref { font-size: 11px; color: var(--muted); font-weight: 400; }
+
+  table.labs { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 12px; }
+  table.labs th, table.labs td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  table.labs th { color: var(--muted); font-weight: 500; font-size: 11.5px; }
+  table.labs td.num { font-family: var(--mono); }
+  .pill { font-size: 10.5px; padding: 1px 8px; border-radius: 999px; font-weight: 600; }
+  .pill.high { background: rgba(248,81,73,.15); color: #ffa198; }
+  .pill.norm { background: rgba(63,185,80,.15); color: #7ee787; }
+
+  /* ===== Verdict ===== */
+  .verdict-banner {
+    display: flex; align-items: center; gap: 14px;
+    background: linear-gradient(135deg, rgba(248,81,73,.12), rgba(240,136,62,.06));
+    border: 1px solid rgba(248,81,73,.4);
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 14px;
+  }
+  .verdict-banner .icon { font-size: 26px; }
+  .verdict-banner .state { font-size: 16px; font-weight: 700; color: #ffa198; font-family: var(--mono); }
+  .verdict-banner .conc { font-size: 12px; color: var(--muted); }
+  .codes { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+  .code {
+    font-family: var(--mono); font-size: 11px; padding: 3px 9px;
+    border-radius: 6px; background: rgba(88,166,255,.1);
+    border: 1px solid rgba(88,166,255,.35); color: #79c0ff;
+  }
+  .ev li { margin-bottom: 6px; }
+  .ev li::marker { color: var(--ok); }
+  .ev.miss li::marker { color: var(--warn); }
+  .ev-title { font-size: 12.5px; font-weight: 600; margin: 12px 0 6px; }
+  .ev { margin: 0; padding-left: 20px; font-size: 12.5px; color: #c9d1d9; }
+
+  footer {
+    margin-top: 22px; padding: 14px 16px;
+    border: 1px dashed rgba(210,153,34,.5); border-radius: 10px;
+    background: rgba(210,153,34,.06);
+    color: var(--warn); font-size: 12px;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 980px) { .row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="title-block">
+      <h1>肝细胞癌（HCC）多模态 VLM 演示</h1>
+      <div class="sub">视觉-语言模型 · 影像分割证据 × 检验科肿瘤标志物 · 纵向随访融合裁决</div>
+    </div>
+    <div class="badges">
+      <span class="badge blue">患者 DEMO_HCC_001</span>
+      <span class="badge blue">CT · 肝脏</span>
+      <span class="badge amber">schema v0.1.0</span>
+      <span class="badge red">研究演示 · 非诊断用途</span>
+    </div>
+  </header>
+
+  <div style="margin-bottom:16px;padding:10px 14px;border:1px solid rgba(210,153,34,.55);border-radius:10px;background:rgba(210,153,34,.08);color:#d29922;font-size:12.5px">
+    ⚠️ <b>MOCK / SYNTHETIC DEMO</b>：本页展示的是<b>合成数据 + 确定性规则管线</b>的端到端效果，
+    影像"推理控制台"为预写脚本的回放，<b>不是真实 VLM 模型推理</b>。真实 3D VLM 推理见仓库
+    <code>docs/VLM_WEB_DEMO_PLAN.md</code> 的 Roadmap。
+  </div>
+
+  <!-- pipeline -->
+  <div class="pipeline">
+    <div class="step"><span class="num">1</span><b>影像输入</b>增强 CT + 预计算分割掩膜</div>
+    <div class="step"><span class="num">2</span><b>VLM 影像理解</b>病灶检出 / 体积测量 / 纵向配对</div>
+    <div class="step"><span class="num">3</span><b>检验科证据</b>AFP / DCP 趋势与参考上限</div>
+    <div class="step"><span class="num">4</span><b>多模态融合</b>一致性裁决 + 可解释 reason codes</div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT: imaging -->
+    <section class="card">
+      <h2><span class="dot" style="background:var(--up)"></span>影像面板 · 轴位增强 CT（随访 2026-07-15）</h2>
+      <div class="body">
+        <div class="ct-frame">
+          <img src="ct-slices.png" alt="肝脏增强 CT 轴位图像，红色为分割掩膜叠加">
+        </div>
+        <div class="ct-caption">
+          <span>slice 28 / 48 / 96 · 层厚 2.5 mm · 间距 1.5×1.5 mm</span>
+          <div class="lesion-chips">
+            <span class="chip">P_064</span>
+            <span class="chip">P_126</span>
+            <span class="chip">P_137</span>
+            <span class="chip">P_178</span>
+          </div>
+        </div>
+        <div class="legend">
+          <span><span class="sw" style="background:rgba(248,81,73,.75)"></span>分割掩膜叠加（precomputed mask）</span>
+          <span><span class="sw" style="background:#8b949e"></span>标注框 = 检出候选区域</span>
+        </div>
+
+        <div style="height:14px"></div>
+
+        <div class="metrics">
+          <div class="metric">
+            <div class="k">总肿瘤体积（基线 → 随访）</div>
+            <div class="v">0.692 → 1.632 <span style="font-size:12px">mL</span></div>
+            <div class="d up">▲ +135.8%</div>
+          </div>
+          <div class="metric">
+            <div class="k">病灶数量（基线 → 随访）</div>
+            <div class="v">1 → 2</div>
+            <div class="d up">▲ 新发灶几何信号</div>
+          </div>
+          <div class="metric">
+            <div class="k">匹配病灶 L1 体积变化</div>
+            <div class="v up">+109.0%</div>
+            <div class="d dim">最近质心配对（&lt;15 mm）</div>
+          </div>
+          <div class="metric">
+            <div class="k">质控状态</div>
+            <div class="v ok" style="font-size:16px">PASS</div>
+            <div class="d dim">图像-掩膜对齐 ✓</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: VLM console -->
+    <section class="card">
+      <h2><span class="dot" style="background:var(--accent)"></span>VLM 结构化输出 · 影像证据链</h2>
+      <div class="body">
+        <div class="console" id="console"></div>
+        <div style="margin-top:12px; font-size:11.5px; color:var(--muted)">
+          解释边界：测量依赖输入分割掩膜；最大径为 3D 包围盒指标，<b>非</b> RECIST / mRECIST 直径；不推断 LI-RADS、强化方式或病理诊断。
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="row">
+    <!-- Labs -->
+    <section class="card">
+      <h2><span class="dot" style="background:var(--accent-2)"></span>检验科证据 · 肿瘤标志物趋势</h2>
+      <div class="body">
+        <div class="chart-wrap">
+          <div class="chart-title">
+            <span>AFP（甲胎蛋白）趋势</span>
+            <span class="ref">参考上限 7.0 ng/mL</span>
+          </div>
+          <svg viewBox="0 0 460 190" width="100%" role="img" aria-label="AFP 趋势图">
+            <!-- grid -->
+            <line x1="46" y1="20"  x2="46"  y2="150" stroke="#2b3342"/>
+            <line x1="46" y1="150" x2="440" y2="150" stroke="#2b3342"/>
+            <!-- reference line 7.0 -->
+            <line x1="46" y1="139.5" x2="440" y2="139.5" stroke="#d29922" stroke-dasharray="5 4"/>
+            <text x="436" y="135" fill="#d29922" font-size="10" text-anchor="end">ULN 7.0</text>
+            <!-- AFP line: values 6, 18, 85.3 ; y scale: 150 - v/90*125 -->
+            <polyline points="90,141.7 245,126.7 400,31.8" fill="none" stroke="#f85149" stroke-width="2.5"/>
+            <circle cx="90"  cy="141.7" r="4" fill="#f85149"/>
+            <circle cx="245" cy="126.7" r="4" fill="#f85149"/>
+            <circle cx="400" cy="31.8"  r="4.5" fill="#f85149"/>
+            <text x="90"  y="132" fill="#e6edf3" font-size="10.5" text-anchor="middle" font-family="monospace">6.0</text>
+            <text x="245" y="117" fill="#e6edf3" font-size="10.5" text-anchor="middle" font-family="monospace">18.0</text>
+            <text x="400" y="22"  fill="#ffa198" font-size="11" text-anchor="middle" font-weight="bold" font-family="monospace">85.3</text>
+            <text x="90"  y="166" fill="#8b949e" font-size="10" text-anchor="middle">2026-01-15</text>
+            <text x="245" y="166" fill="#8b949e" font-size="10" text-anchor="middle">2026-04-15</text>
+            <text x="400" y="166" fill="#8b949e" font-size="10" text-anchor="middle">2026-07-15</text>
+            <text x="300" y="60" fill="#f85149" font-size="11" font-weight="bold">▲ +1321.7%（rising）</text>
+          </svg>
+        </div>
+
+        <table class="labs">
+          <thead>
+            <tr><th>标志物</th><th>日期</th><th>结果</th><th>单位</th><th>参考上限</th><th>判定</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>AFP</td><td>2026-01-15</td><td class="num">6.0</td><td>ng/mL</td><td class="num">7.0</td><td><span class="pill norm">正常</span></td></tr>
+            <tr><td>AFP</td><td>2026-04-15</td><td class="num">18.0</td><td>ng/mL</td><td class="num">7.0</td><td><span class="pill high">升高</span></td></tr>
+            <tr><td>AFP</td><td>2026-07-15</td><td class="num" style="color:#ffa198;font-weight:700">85.3</td><td>ng/mL</td><td class="num">7.0</td><td><span class="pill high">升高 ×12.2</span></td></tr>
+            <tr><td>DCP</td><td>2026-01-15</td><td class="num">25.0</td><td>mAU/mL</td><td class="num">40.0</td><td><span class="pill norm">正常</span></td></tr>
+            <tr><td>DCP</td><td>2026-07-15</td><td class="num" style="color:#ffa198;font-weight:700">68.0</td><td>mAU/mL</td><td class="num">40.0</td><td><span class="pill high">升高 · +172%</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Verdict -->
+    <section class="card">
+      <h2><span class="dot" style="background:var(--up)"></span>多模态融合裁决</h2>
+      <div class="body">
+        <div class="verdict-banner">
+          <div class="icon">⚠️</div>
+          <div>
+            <div class="state">concordant_progression_signal</div>
+            <div class="conc">影像-检验一致性：<b style="color:#7ee787">高（high）</b> · 需临床医生复核</div>
+          </div>
+        </div>
+
+        <div class="codes">
+          <span class="code">AFP_RISING_ABOVE_REFERENCE</span>
+          <span class="code">DCP_RISING_ABOVE_REFERENCE</span>
+          <span class="code">NEW_LESION_GEOMETRIC_SIGNAL</span>
+          <span class="code">TOTAL_TUMOR_VOLUME_INCREASE</span>
+        </div>
+
+        <div class="ev-title">支持性证据（影像 ∩ 检验 同向）</div>
+        <ul class="ev">
+          <li>影像几何产生新发灶信号（1 → 2 个病灶）</li>
+          <li>总分割肿瘤体积 +135.8%（0.692 → 1.632 mL）</li>
+          <li>AFP 上升且超过参考上限（85.3 ng/mL，ULN 7.0）</li>
+          <li>DCP 上升且超过参考上限（68 mAU/mL，ULN 40）</li>
+        </ul>
+
+        <div class="ev-title">缺失证据（本演示不覆盖）</div>
+        <ul class="ev miss">
+          <li>放射科医师阅片与强化方式评估</li>
+          <li>临床病史、治疗背景、肝功能与病理</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    ⚠️ <b>预期用途声明</b>：本页面仅为研究演示（research demonstration only），所有患者数据均为合成数据；
+    不构成诊断、分期或治疗决策依据。任何临床使用必须经过具备资质的医师复核。
+  </footer>
+</div>
+
+<script>
+// VLM reasoning console — typewriter replay of the structured evidence chain
+const lines = [
+  { t: "> vlm.inspect(study=followup_ct, mask=precomputed)", c: "tag" },
+  { t: "  modality=CT  region=liver  qc=PASS  aligned=true", c: "" },
+  { t: "  lesions=2  total_volume=1.632 mL", c: "" },
+  { t: "> vlm.compare(baseline=2026-01-15, followup=2026-07-15)", c: "tag" },
+  { t: "  match(L1→L1)  centroid_dist=0.0 mm  Δvol=+109.0%", c: "" },
+  { t: "  new_lesion_signal = TRUE", c: "bad" },
+  { t: "  category = imaging_progression_signal", c: "bad" },
+  { t: "> labs.trend(markers=[AFP, DCP])", c: "tag2" },
+  { t: "  AFP  6.0 → 18.0 → 85.3 ng/mL  rising, >ULN(7.0)", c: "bad" },
+  { t: "  DCP  25.0 → 68.0 mAU/mL       rising, >ULN(40.0)", c: "bad" },
+  { t: "> fuse(imaging, labs)", c: "tag" },
+  { t: "  concordance = HIGH", c: "ok" },
+  { t: "  state = concordant_progression_signal", c: "bad" },
+  { t: "  requires_clinician_review = TRUE", c: "" },
+];
+
+const box = document.getElementById("console");
+let li = 0;
+function typeLine() {
+  if (li >= lines.length) {
+    const cur = document.createElement("span");
+    cur.className = "cur";
+    box.appendChild(cur);
+    return;
+  }
+  const { t, c } = lines[li++];
+  const div = document.createElement("div");
+  div.className = "line" + (c ? " " + c : "");
+  box.appendChild(div);
+  let i = 0;
+  const iv = setInterval(() => {
+    div.textContent = t.slice(0, ++i);
+    box.scrollTop = box.scrollHeight;
+    if (i >= t.length) {
+      clearInterval(iv);
+      setTimeout(typeLine, 120);
+    }
+  }, 10);
+}
+typeLine();
+</script>
+</body>
+</html>
