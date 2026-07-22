@@ -204,6 +204,33 @@
     padding: 12px 14px; font-size: 12px; color: var(--muted); font-style: italic;
     max-height: 180px; overflow-y: auto;
   }
+
+  /* ===== Human-readable report doc ===== */
+  .report-doc {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 22px 28px; max-width: 860px;
+  }
+  .report-doc h3 { margin: 0 0 4px; font-size: 17px; font-weight: 650; }
+  .report-doc h4 {
+    margin: 18px 0 6px; font-size: 13px; font-weight: 650; color: var(--accent);
+    border-bottom: 1px solid var(--border); padding-bottom: 4px;
+  }
+  .report-doc p, .report-doc li { font-size: 13px; color: #c9d1d9; }
+  .report-doc ul { margin: 4px 0; padding-left: 20px; }
+  .report-doc li { margin-bottom: 4px; }
+  .rd-scope { color: var(--muted); font-size: 12px !important; margin-top: 0; }
+  .rd-hl { color: #ffa198; }
+  .rd-meta { color: var(--muted); font-size: 12px !important; }
+  .rd-disclaimer {
+    margin-top: 18px; padding: 10px 14px; border-radius: 8px;
+    background: rgba(210,153,34,.08); border: 1px solid rgba(210,153,34,.4);
+    color: var(--warn) !important; font-size: 12px !important;
+  }
+  .rd-note { margin-top: 14px; font-size: 12.5px; color: var(--muted); max-width: 860px; }
+  .tech-details { margin-top: 14px; }
+  .tech-details summary {
+    cursor: pointer; font-size: 12.5px; color: var(--accent); user-select: none;
+  }
 </style>
 </head>
 <body>
@@ -224,7 +251,7 @@
 
   <div style="margin-bottom:16px;padding:10px 14px;border:1px solid rgba(210,153,34,.55);border-radius:10px;background:rgba(210,153,34,.08);color:#d29922;font-size:12.5px">
     ⚠️ <b>数据边界声明</b>：本页影像/检验数值为<b>合成数据</b>经<b>确定性管线真实计算</b>的结果；
-    "推理控制台"为示意回放，<b>不是真实 VLM 推理</b>。但页面底部「LLM 渲染层实录」为
+    "推理控制台"为示意回放，<b>不是真实 VLM 推理</b>。页面底部「模型生成的研究报告」为
     <b>真实模型调用 + 真实安全审计</b>（DashScope · deepseek-r1-distill-qwen-32b）。
     真实 3D VLM 推理见仓库 <code>docs/VLM_WEB_DEMO_PLAN.md</code> 的 Roadmap。
   </div>
@@ -383,35 +410,88 @@
   <!-- ============ 真实 LLM 渲染层实录 ============ -->
   <div class="row">
     <section class="card" style="grid-column: 1 / -1">
-      <h2><span class="dot" style="background:var(--ok)"></span>LLM 受控渲染层 · 真实调用实录<span class="pill norm" style="margin-left:auto">审计 PASS</span></h2>
+      <h2><span class="dot" style="background:var(--ok)"></span>模型生成的研究报告 · 真实输出<span class="pill norm" style="margin-left:auto">审计 PASS</span></h2>
       <div class="body">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-          <span class="badge blue">DashScope · OpenAI 兼容端点</span>
-          <span class="badge blue">deepseek-r1-distill-qwen-32b</span>
-          <span class="badge">temperature 0.3 · max_tokens 6000 · response_format json</span>
-          <span class="badge">tokens: 2737 prompt / 1213 completion</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+          <span class="badge blue">DashScope · deepseek-r1-distill-qwen-32b</span>
+          <span class="badge">输入：影像证据 + 检验证据（JSON）</span>
+          <span class="badge">输出：自然语言研究报告</span>
         </div>
 
-        <div class="audit-timeline">
-          <div class="at-item fail">
-            <div class="at-tag">第 1 次调用 · 拦截</div>
-            <div class="at-body">
-              <code>SCHEMA_INVALID</code> imaging_summary 写了 3 条（上限 2 条）<br>
-              <code>STAGING_ASSERTION</code> "No LI-RADS …" 被误判为分期断言 → <b>发现守卫代码 bug 并修复</b>（句首裸 "No/not" 否定识别）
-            </div>
-          </div>
-          <div class="at-arrow">→</div>
-          <div class="at-item pass">
-            <div class="at-tag">第 2 次调用 · 放行</div>
-            <div class="at-body">
-              schema 合法 ✓ 锁定字段未改 ✓ 证据原样 ✓ 无编造数字 ✓ 无诊断/分期/治疗越界 ✓
-            </div>
-          </div>
-        </div>
+        <!-- 人读报告主体 -->
+        <article class="report-doc">
+          <h3>HCC 多模态研究证据摘要</h3>
+          <p class="rd-scope">数据范围：本例影像与检验输入均为同一演示案例的合成数据。</p>
 
-        <div class="llm-cols">
-          <div>
-            <div class="ev-title">模型真实输出（受控报告 JSON，审计通过）</div>
+          <h4>综合结果</h4>
+          <p><b class="rd-hl">纵向影像与肿瘤标志物共同形成进展信号。</b>
+          Concordant progression signal detected with rising AFP and DCP levels,
+          imaging showing new lesion and increased tumor volume.</p>
+          <p class="rd-meta">人工复核：<b>需要</b> · 数据质量：<b>warning</b> · 一致性：<b>high</b></p>
+
+          <h4>影像证据</h4>
+          <ul>
+            <li>Baseline imaging: synthetic CT volume from 2026-01-15 with 1 mass region, volume 0.692 mL, max 3D bounding extent 17.5 mm</li>
+            <li>Followup imaging: synthetic CT volume from 2026-07-15 with 2 mass regions, volume 1.632 mL, max 3D bounding extent 22.5 mm</li>
+          </ul>
+
+          <h4>检验证据</h4>
+          <ul>
+            <li>AFP: rising from 6.0 to 85.3 ng/mL, above reference high of 7.0 ng/mL</li>
+            <li>DCP: rising from 25.0 to 68.0 mAU/mL, above reference high of 40.0 mAU/mL</li>
+          </ul>
+
+          <h4>支持证据</h4>
+          <ul>
+            <li>AFP is rising and above its supplied upper reference (85.3 ng/mL)</li>
+            <li>DCP is rising and above its supplied upper reference (68 mAU/mL)</li>
+            <li>Imaging geometry produced a new-lesion signal</li>
+            <li>Total segmented tumor volume changed +135.8%</li>
+          </ul>
+
+          <h4>缺失与不确定性</h4>
+          <ul>
+            <li>Clinical history, liver function, pathology, and complete treatment context are outside this rule</li>
+            <li>Radiologist interpretation and enhancement-pattern assessment are not provided</li>
+          </ul>
+
+          <h4>质量与使用边界</h4>
+          <ul>
+            <li>Baseline / followup imaging quality status: pass · Laboratory quality status: pass</li>
+            <li>Registration was inferred from an identical NIfTI grid, not independently verified</li>
+            <li>The category is a research heuristic and is not RECIST, mRECIST, or LI-RADS</li>
+          </ul>
+
+          <p class="rd-disclaimer">Research use only; not for diagnosis, staging, prognosis, or treatment decisions.</p>
+        </article>
+
+        <p class="rd-note">
+          以上为 <b>deepseek-r1-distill-qwen-32b</b> 的真实返回（经安全审计逐字核验：数字无一改动、
+          证据无遗漏、无诊断/分期/治疗越界表述），由项目渲染器排版。模型只做"翻译官"——
+          把结构化证据转写成人话，结论仍由确定性规则引擎产出。
+        </p>
+
+        <details class="tech-details">
+          <summary>技术细节（调用参数 · token 用量 · 审计过程 · 原始 JSON · 思维链）</summary>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+            <span class="badge">OpenAI 兼容端点 · temperature 0.3 · max_tokens 6000</span>
+            <span class="badge">tokens: 2737 prompt / 1213 completion</span>
+          </div>
+          <div class="audit-timeline">
+            <div class="at-item fail">
+              <div class="at-tag">第 1 次调用 · 拦截</div>
+              <div class="at-body">
+                <code>SCHEMA_INVALID</code> imaging_summary 写了 3 条（上限 2 条）；
+                <code>STAGING_ASSERTION</code> "No LI-RADS …" 句首否定被误判 → 修复守卫 bug（commit eba2134）
+              </div>
+            </div>
+            <div class="at-arrow">→</div>
+            <div class="at-item pass">
+              <div class="at-tag">第 2 次调用 · 放行</div>
+              <div class="at-body">schema 合法 ✓ 锁定字段未改 ✓ 证据原样 ✓ 无编造数字 ✓ 无越界 ✓</div>
+            </div>
+          </div>
+          <div class="llm-cols">
             <pre class="json-view">{
   "case_id": "DEMO_HCC_001",
   "report_type": "longitudinal_synthetic_demo",
@@ -425,27 +505,15 @@
   ],
   "multimodal_assessment": {
     "state": "concordant_progression_signal",
-    "concordance": "high",
-    "summary": "Concordant progression signal detected with rising AFP and DCP levels, imaging showing new lesion and increased tumor volume"
+    "concordance": "high"
   },
-  "review_required": true,
-  "intended_use": "research prototype only; not for diagnosis, staging, prognosis, or treatment decisions"
+  "review_required": true
 }</pre>
-          </div>
-          <div>
-            <div class="ev-title">模型思维链摘录（reasoning_content，1213 tokens）</div>
             <div class="reasoning-box">
-              "Okay, so I'm trying to help this user by rendering a structured evidence JSON into a report according to the given output schema… I need to make sure I copy every locked machine field exactly. That includes things like case_id, scenario_id, report_type, state, concordance… Every required_quality_item must appear verbatim in quality_and_limits…"
+              思维链摘录："Okay, so I'm trying to help this user by rendering a structured evidence JSON into a report according to the given output schema… I need to make sure I copy every locked machine field exactly. That includes case_id, scenario_id, report_type, state, concordance… Every required_quality_item must appear verbatim in quality_and_limits…"
             </div>
-            <div class="ev-title" style="margin-top:14px">这说明了什么</div>
-            <ul class="ev">
-              <li>LLM 只做<b>渲染</b>：数字全部来自证据 JSON，模型无权修改</li>
-              <li>第 1 次失败证明审计不是摆设——schema 违规当场拦截</li>
-              <li>失败暴露并修复了一个真实的守卫 bug，已回归测试（79 全绿）</li>
-              <li>推理模型在严格 JSON 场景需调参（temperature&gt;0 防重复循环）</li>
-            </ul>
           </div>
-        </div>
+        </details>
       </div>
     </section>
   </div>
