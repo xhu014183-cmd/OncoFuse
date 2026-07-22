@@ -77,7 +77,10 @@ def _narrative_text(report: dict[str, Any]) -> str:
 
 def _negated(line: str, match_start: int) -> bool:
     prefix = line[max(0, match_start - 60) : match_start].casefold()
-    return prefix.strip().startswith(("no ", "not ")) or any(
+    stripped = prefix.strip()
+    if stripped in ("no", "not") or stripped.startswith(("no ", "not ")):
+        return True
+    return any(
         token in prefix for token in (" not ", " no ", "without ", "不得", "不用于", "未进行")
     )
 
