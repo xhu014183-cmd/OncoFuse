@@ -1,8 +1,8 @@
-# HCC Multimodal: Fail-Closed Evidence Fusion for Liver Imaging & AFP/DCP
+# OncoFuse: Fail-Closed Evidence Fusion for Liver Imaging & AFP/DCP
 
 [中文说明](README.zh-CN.md) | English
 
-[![CI](https://github.com/YOUR-ORG/hcc-multimodal/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR-ORG/hcc-multimodal/actions/workflows/ci.yml)
+[![CI](https://github.com/xhu014183-cmd/OncoFuse/actions/workflows/ci.yml/badge.svg)](https://github.com/xhu014183-cmd/OncoFuse/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Schema 1.0](https://img.shields.io/badge/schema-1.0.0-green)](schemas/)
 [![License](https://img.shields.io/badge/license-see%20LICENSE-orange)](LICENSE)
