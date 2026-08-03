@@ -34,6 +34,9 @@ public-data = [
 ]
 ocr = []
 llm = []
+registration = [
+  "SimpleITK>=2.3,<3",
+]
 imaging-ai = [
   "torch>=2.2,<3",
   "monai>=1.3,<2",
@@ -70,5 +73,5 @@ check_untyped_defs = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["scipy", "scipy.*", "torch", "torch.*", "transformers", "transformers.*", "monai", "monai.*"]
+module = ["scipy", "scipy.*", "torch", "torch.*", "transformers", "transformers.*", "monai", "monai.*", "SimpleITK", "SimpleITK.*"]
 ignore_missing_imports = true

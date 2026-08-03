@@ -190,6 +190,20 @@ class LesionMatchEvidence(JsonModel):
     reason_codes: list[str] = Field(default_factory=list)
 
 
+class RegistrationEvidence(JsonModel):
+    """Auditable record of a rigid baseline/follow-up registration attempt."""
+
+    status: Literal["verified", "failed", "unavailable"]
+    method: str
+    transform_matrix: list[list[float]] | None = None
+    translation_mm: list[float] | None = None
+    rotation_deg: list[float] | None = None
+    metric_value: float | None = None
+    centroid_residual_mm: float | None = None
+    coordinate_frame: str = "itk_lps"
+    warnings: list[str] = Field(default_factory=list)
+
+
 class LongitudinalImagingEvidence(ArtifactModel):
     patient_id: str
     baseline_date: str
@@ -208,6 +222,7 @@ class LongitudinalImagingEvidence(ArtifactModel):
     method: str
     threshold_version: str
     warnings: list[str]
+    registration: RegistrationEvidence | None = None
 
 
 class MarkerObservation(JsonModel):

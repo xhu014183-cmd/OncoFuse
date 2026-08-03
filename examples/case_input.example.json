@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "case_id": "CASE_EXAMPLE_001",
+  "patient_id": "DEMO_HCC_001",
+  "index_date": "2026-07-20",
+  "imaging": {
+    "dicom_dir": "synthetic-case/study",
+    "seg": "synthetic-case/seg.dcm",
+    "phase": "portal_venous",
+    "image_evidence": "examples/image_evidence.synthetic.json"
+  },
+  "laboratory": {
+    "source_type": "file",
+    "file_path": "examples/lab_report.synthetic.txt"
+  },
+  "hpi": {
+    "source_type": "inline",
+    "inline": {
+      "format": "text",
+      "content": "2026-01-15 行 TACE。\n2026-02-20 AFP 由 850 降至 120。\n2026-05-10 AFP 降至 18，复查 MRI。\n2026-07-20 AFP 再次升至 96，复查 MRI。"
+    }
+  },
+  "llm_response": null,
+  "output_dir": "case-output"
+}

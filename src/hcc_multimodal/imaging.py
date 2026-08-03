@@ -22,6 +22,7 @@ from .schemas import (
     QualityCheck,
     QualityEvidence,
     QualityStatus,
+    RegistrationEvidence,
     SourceReference,
 )
 
@@ -317,6 +318,7 @@ def compare_imaging(
     rules_path: str | Path | None = None,
     baseline_embeddings: dict[str, np.ndarray] | None = None,
     followup_embeddings: dict[str, np.ndarray] | None = None,
+    registration: RegistrationEvidence | None = None,
 ) -> LongitudinalImagingEvidence:
     """Globally match lesions after checking identity, time, geometry, and registration."""
     if baseline.patient_id != followup.patient_id:
@@ -389,6 +391,7 @@ def compare_imaging(
             method="hungarian-physical-geometry",
             threshold_version=threshold_version,
             warnings=[error],
+            registration=registration,
         )
 
     change_pct = None
@@ -570,4 +573,5 @@ def compare_imaging(
         method="hungarian-centroid-bbox-volume" + ("-embedding" if config["embedding_weight"] else ""),
         threshold_version=threshold_version,
         warnings=warnings,
+        registration=registration,
     )

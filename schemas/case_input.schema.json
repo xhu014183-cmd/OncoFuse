@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hcc-multimodal-demo.local/schemas/case_input.schema.json",
+  "title": "HCCMultimodalCaseInput",
+  "description": "Unified input envelope for the HCC multimodal three-line case pipeline. Designed to map 1:1 to existing CLI arguments with minimal code changes.",
+  "type": "object",
+  "required": ["schema_version", "case_id", "patient_id", "imaging", "laboratory"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "case_id": {
+      "type": "string",
+      "description": "User-visible case identifier. May equal patient_id for single-patient cases."
+    },
+    "patient_id": {
+      "type": "string",
+      "description": "Research pseudonym. Must match DICOM PatientID when DICOM is supplied."
+    },
+    "index_date": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO-8601 decision/index date. Defaults to imaging study_date when omitted."
+    },
+    "imaging": {
+      "type": "object",
+      "required": ["dicom_dir"],
+      "properties": {
+        "dicom_dir": {
+          "type": "string",
+          "description": "Path to directory containing CT/MR DICOM series."
+        },
+        "seg": {
+          "type": ["string", "null"],
+          "description": "Optional path to DICOM SEG or NIfTI segmentation mask."
+        },
+        "phase": {
+          "type": ["string", "null"],
+          "description": "Optional phase hint: arterial, portal_venous, delayed, unknown."
+        },
+        "image_evidence": {
+          "type": ["string", "object", "null"],
+          "description": "Path to image-tool JSON file, or inline ImageToolEvidence object."
+        }
+      },
+      "additionalProperties": false
+    },
+    "laboratory": {
+      "type": "object",
+      "description": "Laboratory evidence: either a file path or inline content. The parser auto-detects TXT/JSON/CSV from file extension or explicit format.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["source_type", "file_path"],
+          "properties": {
+            "source_type": { "const": "file" },
+            "file_path": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["source_type", "inline"],
+          "properties": {
+            "source_type": { "const": "inline" },
+            "inline": {
+              "type": "object",
+              "required": ["format", "content"],
+              "properties": {
+                "format": {
+                  "type": "string",
+                  "enum": ["text", "json", "csv"]
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Raw laboratory report content. For json/csv, this must be valid JSON/CSV text."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "hpi": {
+      "type": "object",
+      "description": "Optional history-of-present-illness evidence: either a file path or inline content.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["source_type", "file_path"],
+          "properties": {
+            "source_type": { "const": "file" },
+            "file_path": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["source_type", "inline"],
+          "properties": {
+            "source_type": { "const": "inline" },
+            "inline": {
+              "type": "object",
+              "required": ["format", "content"],
+              "properties": {
+                "format": {
+                  "type": "string",
+                  "enum": ["text", "json"]
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Raw HPI text or JSON event array."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "llm_response": {
+      "type": ["string", "object", "null"],
+      "description": "Optional offline LLM rewrite JSON to validate against the deterministic summary."
+    },
+    "output_dir": {
+      "type": "string",
+      "description": "Directory for pipeline artifacts. Equivalent to --output."
+    }
+  },
+  "additionalProperties": false
+}

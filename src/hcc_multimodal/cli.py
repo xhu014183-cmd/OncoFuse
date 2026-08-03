@@ -24,6 +24,7 @@ from .imaging_adapter import parse_imaging_study
 from .labs import load_lab_evidence
 from .hpi import parse_hpi_timeline
 from .preview import create_overlay_montage
+from .registration import register_volumes
 from .prompting import build_report_prompt, write_prompt_bundle
 from .research_cohort import build_research_cohort, validate_research_cohort
 from .research_evaluation import evaluate_research_cohort, validate_adjudications
@@ -47,6 +48,7 @@ from .schemas import (
     LabEvidence,
     LongitudinalImagingEvidence,
     MultimodalCaseEvidence,
+    RegistrationEvidence,
     json_schema_for,
 )
 from .tcia import (
@@ -158,9 +160,27 @@ def run_case(
     registration_status: Literal[
         "verified", "assumed_same_grid", "failed", "unavailable"
     ] | None = None,
+    registration_mode: Literal["auto", "off"] = "auto",
     treatment_events: list[dict[str, object]] | None = None,
 ) -> Path:
     output = Path(output_dir)
+    registration_evidence: RegistrationEvidence | None = None
+    if registration_mode == "auto" and registration_status is None:
+        outcome = register_volumes(
+            baseline_image,
+            baseline_mask,
+            followup_image,
+            followup_mask,
+            output / "registration",
+        )
+        registration_evidence = outcome.evidence
+        if outcome.evidence.status == "verified" and outcome.image_path and outcome.mask_path:
+            followup_image = outcome.image_path
+            followup_mask = outcome.mask_path
+            registration_status = "verified"
+        elif outcome.evidence.status == "failed":
+            registration_status = "failed"
+        # "unavailable" keeps registration_status=None so legacy geometry inference applies
     baseline = measure_nifti(
         baseline_image, baseline_mask,
         patient_id=patient_id,
@@ -179,6 +199,7 @@ def run_case(
         baseline,
         followup,
         registration_status=registration_status,
+        registration=registration_evidence,
     )
     labs = load_lab_evidence(labs_path, index_time=followup_date)
     verdict = fuse_evidence(labs, longitudinal, treatment_events=treatment_events)
@@ -514,6 +535,16 @@ def main() -> None:
         help="Declared registration QC; omitted values are inferred conservatively from geometry",
     )
     analyze.add_argument(
+        "--registration-mode",
+        choices=("auto", "off"),
+        default="auto",
+        help=(
+            "auto rigidly registers follow-up onto baseline via SimpleITK when "
+            "--registration-status is not declared (degrades to legacy inference "
+            "when SimpleITK is missing); off skips registration"
+        ),
+    )
+    analyze.add_argument(
         "--treatment-events",
         default=None,
         help="Optional JSON file containing an array of intervening treatment events",
@@ -734,6 +765,7 @@ def main() -> None:
             lab_origin=args.lab_origin,
             data_relationship=args.data_relationship,
             registration_status=args.registration_status,
+            registration_mode=args.registration_mode,
             treatment_events=treatment_events,
         )
         print(f"Wrote {verdict_path}")

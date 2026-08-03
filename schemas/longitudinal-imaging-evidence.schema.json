@@ -209,6 +209,115 @@
       "title": "QualityEvidence",
       "type": "object"
     },
+    "RegistrationEvidence": {
+      "additionalProperties": false,
+      "description": "Auditable record of a rigid baseline/follow-up registration attempt.",
+      "properties": {
+        "centroid_residual_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Centroid Residual Mm"
+        },
+        "coordinate_frame": {
+          "default": "itk_lps",
+          "title": "Coordinate Frame",
+          "type": "string"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "metric_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metric Value"
+        },
+        "rotation_deg": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rotation Deg"
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "failed",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "transform_matrix": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transform Matrix"
+        },
+        "translation_mm": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Translation Mm"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status",
+        "method"
+      ],
+      "title": "RegistrationEvidence",
+      "type": "object"
+    },
     "SourceReference": {
       "additionalProperties": false,
       "properties": {
@@ -338,6 +447,17 @@
       },
       "title": "Reason Codes",
       "type": "array"
+    },
+    "registration": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RegistrationEvidence"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "registration_status": {
       "enum": [
