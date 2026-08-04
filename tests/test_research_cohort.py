@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
-import json
 
 import pydicom
 import pytest
 from pydantic import ValidationError
+from test_dicom_geometry import _write_phantom
 
 from hcc_multimodal.research_cohort import (
     _case_protocol_findings,
@@ -24,7 +25,6 @@ from hcc_multimodal.research_models import (
     ResearchRunManifest,
     StudyReference,
 )
-from test_dicom_geometry import _write_phantom
 
 
 def _write_study(

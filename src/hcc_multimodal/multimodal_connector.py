@@ -8,7 +8,6 @@ from pydantic import Field
 
 from .schemas import JsonModel
 
-
 PHASE_IDS = {
     "unknown": 0,
     "noncontrast": 1,
@@ -135,9 +134,9 @@ def trainable_parameter_count(module: Any) -> int:
 
 
 __all__ = [
-    "ConnectorConfig",
     "PHASE_IDS",
     "TIMEPOINT_IDS",
+    "ConnectorConfig",
     "build_multimodal_connector",
     "freeze_module",
     "trainable_parameter_count",

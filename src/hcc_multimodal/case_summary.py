@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Literal, cast
 
 from .case_models import (
@@ -15,7 +15,6 @@ from .case_models import (
     ImagingInterpretationEvidence,
 )
 from .schemas import QualityEvidence, QualityStatus, SourceReference
-
 
 _FORBIDDEN = re.compile(r"\b(diagnos|stage|staging|prognos|treatment recommendation|therapy recommendation|li-?rads|bclc)\b|" + "\u8bca\u65ad|\u5206\u671f|\u6cbb\u7597\u5efa\u8bae|\u9884\u540e", re.IGNORECASE)
 

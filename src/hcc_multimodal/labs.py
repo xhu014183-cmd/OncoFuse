@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import json
+import re
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
 from typing import Any
-import json
-import re
 
 from .schemas import (
     Comparator,
@@ -20,7 +20,6 @@ from .schemas import (
     SourceReference,
     TrendDirection,
 )
-
 
 MARKER_ALIASES: dict[MarkerName, tuple[str, ...]] = {
     "AFP": ("AFP", "甲胎蛋白", "ALPHA-FETOPROTEIN"),
@@ -293,12 +292,12 @@ def load_lab_evidence(path: str | Path, *, index_time: str | None = None) -> Lab
     path = Path(path)
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("Laboratory input must be a JSON object")
+        raise TypeError("Laboratory input must be a JSON object")
     rows = payload.get("observations")
     if rows is None:
         rows = payload.get("testResultInfos", [])
     if not isinstance(rows, list):
-        raise ValueError("Laboratory observations must be an array")
+        raise TypeError("Laboratory observations must be an array")
     parsed = [item for row in rows if isinstance(row, dict) and (item := _row_observation(row))]
     observations, rejected, warnings = _filter_to_index_time(parsed, index_time)
 

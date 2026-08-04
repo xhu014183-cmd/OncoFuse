@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -33,7 +33,7 @@ class VlmTrainingManifest(ArtifactModel):
     examples: list[VlmTrainingExample] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def patient_splits_do_not_leak(self) -> "VlmTrainingManifest":
+    def patient_splits_do_not_leak(self) -> VlmTrainingManifest:
         patient_splits: dict[str, set[str]] = {}
         for example in self.examples:
             patient_splits.setdefault(example.patient_id, set()).add(example.split)
@@ -97,7 +97,7 @@ def train_connector(
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     device = runtime.device_name
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     epoch_losses: list[float] = []
     runtime.train()
     runtime.llm.eval()
@@ -143,7 +143,7 @@ def train_connector(
     output.mkdir(parents=True, exist_ok=True)
     connector_path = output / "m3d_llm_connector.pt"
     torch.save(runtime.connector.state_dict(), connector_path)
-    finished = datetime.now(timezone.utc)
+    finished = datetime.now(UTC)
     trainable = trainable_parameter_count(runtime.connector)
     frozen = sum(parameter.numel() for parameter in runtime.llm.parameters())
     result_artifact = ConnectorTrainingResult(

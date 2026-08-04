@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-import json
 
 from .schemas import (
     PIPELINE_VERSION,
@@ -12,7 +12,6 @@ from .schemas import (
     ControlledReport,
     LabEvidence,
 )
-
 
 SYSTEM_MESSAGE = """You are a constrained renderer for an HCC multimodal research prototype.
 Use only facts in evidence_json. Do not infer, diagnose, stage, predict prognosis, or recommend
@@ -202,7 +201,7 @@ def build_report_prompt(
     return {
         "schema_version": SCHEMA_VERSION,
         "pipeline_version": PIPELINE_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "sources": [
             {"source_id": "validated_pipeline_evidence", "source_type": "deidentified_compact_evidence"}
         ],

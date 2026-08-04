@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Callable, Literal, Protocol, cast
-import math
+from typing import Any, Literal, Protocol, cast
 
 import nibabel as nib
 import numpy as np
@@ -23,7 +24,6 @@ from .visual_tokens import (
     manifest_sources,
     save_visual_tokens,
 )
-
 
 M3D_MODEL_ID = "GoodBaiBai88/M3D-CLIP"
 M3D_MODEL_REVISION = "ae091d89a0ef38b533ecc4ed21426f7658853963"
@@ -278,7 +278,7 @@ def preprocess_physical_roi(
             "input_spacing_xyz_mm": list(volume.spacing_mm),
             "target_spacing_xyz_mm": list(TARGET_SPACING_XYZ_MM),
             "zoom_factors_xyz": [round(value, 8) for value in zoom_factors],
-            "resampled_shape_xyz": [int(round(volume.shape[i] * zoom_factors[i])) for i in range(3)],
+            "resampled_shape_xyz": [round(volume.shape[i] * zoom_factors[i]) for i in range(3)],
             "image_interpolation": "linear",
             "mask_interpolation": "nearest",
         },
@@ -401,9 +401,9 @@ class M3DClipVolumeEncoder:
                 "--allow-m3d-remote-code after reviewing the model implementation."
             )
         try:
+            import monai  # noqa: F401
             import torch
             from transformers import AutoModel
-            import monai  # noqa: F401
         except ImportError as exc:
             raise EncoderUnavailableError(
                 "M3D-CLIP optional dependencies are missing. Install them with: "

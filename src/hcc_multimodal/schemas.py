@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Literal
 import json
 import math
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
 
 SCHEMA_VERSION = "1.0.0"
 PIPELINE_VERSION = "0.4.0"
@@ -28,7 +27,7 @@ Concordance = Literal[
 
 
 def _generated_at() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class JsonModel(BaseModel):
@@ -95,7 +94,7 @@ class QualityEvidence(JsonModel):
     errors: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def status_matches_messages(self) -> "QualityEvidence":
+    def status_matches_messages(self) -> QualityEvidence:
         if self.status == "fail" and not self.errors:
             raise ValueError("Failed quality evidence must include at least one error")
         return self
@@ -171,7 +170,7 @@ class ImagingEvidence(ArtifactModel):
     interpretation_limits: list[str]
 
     @model_validator(mode="after")
-    def lesion_summary_consistent(self) -> "ImagingEvidence":
+    def lesion_summary_consistent(self) -> ImagingEvidence:
         if self.lesion_count != len(self.lesions):
             raise ValueError("lesion_count must equal the number of lesion records")
         return self
@@ -240,7 +239,7 @@ class MarkerObservation(JsonModel):
     quality_status: QualityStatus
 
     @model_validator(mode="after")
-    def parsed_value_consistent(self) -> "MarkerObservation":
+    def parsed_value_consistent(self) -> MarkerObservation:
         if self.parse_status in {"exact", "censored"} and self.value is None:
             raise ValueError("Parsed observations require a numeric value")
         if self.parse_status in {"missing", "invalid", "unsupported_unit"} and self.value is not None:
@@ -352,7 +351,7 @@ class ImageEmbeddingEvidence(ArtifactModel):
     intended_use: str
 
     @model_validator(mode="after")
-    def validate_artifact(self) -> "ImageEmbeddingEvidence":
+    def validate_artifact(self) -> ImageEmbeddingEvidence:
         if self.available and self.embedding_dimension <= 0:
             raise ValueError("Available image embeddings must have a positive dimension")
         if not self.available and self.embedding_dimension != 0:
@@ -379,7 +378,7 @@ class LabFeatureVector(ArtifactModel):
     warnings: list[str]
 
     @model_validator(mode="after")
-    def validate_vector(self) -> "LabFeatureVector":
+    def validate_vector(self) -> LabFeatureVector:
         size = len(self.feature_names)
         if len(self.values) != size or len(self.availability_mask) != size:
             raise ValueError("Lab feature names, values, and availability mask must have equal lengths")

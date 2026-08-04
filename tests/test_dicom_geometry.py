@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-from pathlib import Path
 import json
+from pathlib import Path
 
 import nibabel as nib
 import numpy as np
 import pydicom
 import pytest
 from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
-from pydicom.uid import CTImageStorage, ExplicitVRLittleEndian, SegmentationStorage, generate_uid
+from pydicom.uid import (
+    CTImageStorage,
+    ExplicitVRLittleEndian,
+    SegmentationStorage,
+    generate_uid,
+)
 
 from hcc_multimodal.tcia import convert_ct_and_mass_seg
 

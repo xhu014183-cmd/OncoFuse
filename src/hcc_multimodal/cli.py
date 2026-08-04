@@ -1,31 +1,31 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
-import json
 
-from .contracts import DATA_ORIGINS, PAIRING_STATUSES, build_multimodal_case_evidence
+from .case_llm import render_with_optional_llm
 from .case_models import (
     CaseResearchSummary,
     ClinicalLabEvidence,
     HpiTimelineEvidence,
     ImagingInterpretationEvidence,
 )
-from .case_llm import render_with_optional_llm
 from .case_summary import summarize_case
 from .clinical_labs import parse_laboratory_report
-from .fusion import fuse_cross_sectional_evidence, fuse_evidence
+from .contracts import DATA_ORIGINS, PAIRING_STATUSES, build_multimodal_case_evidence
 from .deepseek import run_deepseek_audit
 from .evaluation import EvaluationCohort, evaluate_cohort_file
+from .fusion import fuse_cross_sectional_evidence, fuse_evidence
+from .hpi import parse_hpi_timeline
 from .imaging import compare_imaging, measure_nifti
 from .imaging_adapter import parse_imaging_study
 from .labs import load_lab_evidence
-from .hpi import parse_hpi_timeline
 from .preview import create_overlay_montage
-from .registration import register_volumes
 from .prompting import build_report_prompt, write_prompt_bundle
+from .registration import register_volumes
 from .research_cohort import build_research_cohort, validate_research_cohort
 from .research_evaluation import evaluate_research_cohort, validate_adjudications
 from .research_models import (
@@ -36,7 +36,6 @@ from .research_models import (
     ResearchProtocol,
     ResearchRunManifest,
 )
-from .synthetic import generate_synthetic_case
 from .schemas import (
     PIPELINE_VERSION,
     SCHEMA_VERSION,
@@ -51,14 +50,15 @@ from .schemas import (
     RegistrationEvidence,
     json_schema_for,
 )
+from .synthetic import generate_synthetic_case
 from .tcia import (
     LAB_SCENARIOS,
     convert_ct_and_mass_seg,
     prepare_hcc003,
     write_composite_labs,
 )
-from .volume_encoders import available_volume_encoders, encode_nifti_volume
 from .vlm_skeleton import run_skeleton_demo
+from .volume_encoders import available_volume_encoders, encode_nifti_volume
 
 
 def _schema_models() -> dict[str, type[JsonModel]]:
@@ -434,7 +434,7 @@ def run_public_demo(
     scenario_matrix = {
         "schema_version": SCHEMA_VERSION,
         "pipeline_version": PIPELINE_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "sources": [{"source_id": "HCC_003", "source_type": "public_composite_scenarios"}],
         "scenarios": scenario_results,
     }
@@ -912,7 +912,7 @@ def main() -> None:
         print(f"Wrote {markdown_path}")
     elif args.command == "vlm-skeleton":
         patch_size = tuple(args.patch_size) if args.patch_size else None
-        manifest, report, report_path = run_skeleton_demo(
+        _manifest, report, report_path = run_skeleton_demo(
             args.image,
             args.output,
             hpi=args.hpi,

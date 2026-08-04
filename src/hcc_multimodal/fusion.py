@@ -18,7 +18,6 @@ from .schemas import (
     SourceReference,
 )
 
-
 DEFAULT_RULES_PATH = Path(__file__).with_name("configs") / "fusion_rules.v1.yaml"
 
 
@@ -26,7 +25,7 @@ def load_fusion_rules(path: str | Path | None = None) -> dict[str, Any]:
     source = Path(path) if path is not None else DEFAULT_RULES_PATH
     payload = yaml.safe_load(source.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or not isinstance(payload.get("version"), str):
-        raise ValueError(f"Invalid fusion rule configuration: {source}")
+        raise TypeError(f"Invalid fusion rule configuration: {source}")
     return payload
 
 

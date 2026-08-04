@@ -8,7 +8,11 @@ from typing import Any
 
 from pydantic import Field
 
-from .multimodal_connector import ConnectorConfig, build_multimodal_connector, freeze_module
+from .multimodal_connector import (
+    ConnectorConfig,
+    build_multimodal_connector,
+    freeze_module,
+)
 from .schemas import JsonModel
 from .vlm_prompting import IMAGE_PATCH_TOKEN, RESEARCH_DISCLAIMER
 

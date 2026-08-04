@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import Path
 import re
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
 import nibabel as nib
@@ -13,7 +13,6 @@ from PIL import Image, ImageDraw
 from pydantic import Field
 
 from .schemas import JsonModel
-
 
 PatchMode = Literal["image_2d", "volume_3d"]
 
@@ -115,7 +114,7 @@ def extract_patches(
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     suffix = source.name.casefold()
-    is_nifti = suffix.endswith(".nii") or suffix.endswith(".nii.gz")
+    is_nifti = suffix.endswith((".nii", ".nii.gz"))
     if is_nifti:
         image = nib.as_closest_canonical(nib.load(str(source)))
         if len(image.shape) != 3:
@@ -176,7 +175,7 @@ def extract_patches(
     else:
         _save_3d_preview(data, (grid[0], grid[1], grid[2]), preview)
     manifest = PatchManifest(
-        generated_at=datetime.now(timezone.utc),
+        generated_at=datetime.now(UTC),
         source_file=source.name,
         source_kind=source_kind,
         mode=mode,
@@ -213,7 +212,7 @@ def run_mock_vlm(
     """Create a deterministic image-conditioned report for UI and pipeline demos."""
     lab_lines = _text_lines(labs)
     marker_lines = [
-        line for line in lab_lines if re.search(r"\b(AFP|DCP|PIVKA|AFP[- ]?L3)\b", line, re.I)
+        line for line in lab_lines if re.search(r"\b(AFP|DCP|PIVKA|AFP[- ]?L3)\b", line, re.IGNORECASE)
     ]
     hpi_lines = _text_lines(hpi)
     return MockVlmReport(

@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-
 STATE_LABELS = {
     "cross_sectional_lesion_marker_signal": "横断面影像标注与合成标志物共同形成信号",
     "segmented_lesion_without_marker_signal": "存在影像标注，标志物未形成支持信号",

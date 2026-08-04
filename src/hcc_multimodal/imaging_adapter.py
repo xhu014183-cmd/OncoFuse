@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections import Counter
 import json
-from pathlib import Path
 import tempfile
+from collections import Counter
+from pathlib import Path
 from typing import Any, Literal, cast
 
 import numpy as np
@@ -21,7 +21,6 @@ from .case_models import (
 from .imaging import measure_nifti
 from .schemas import QualityCheck, QualityEvidence, QualityStatus, SourceReference
 from .tcia import convert_ct_and_mass_seg
-
 
 _PHI_TAGS = (
     "PatientName",
@@ -60,7 +59,7 @@ def _read_series(directory: Path) -> tuple[list[Any], list[str]]:
     for path in sorted(item for item in directory.rglob("*") if item.is_file()):
         try:
             dataset = pydicom.dcmread(str(path), stop_before_pixels=True, force=False)
-        except Exception:
+        except Exception:  # noqa: S112, BLE001
             continue
         if str(getattr(dataset, "Modality", "")) in {"CT", "MR"} and hasattr(dataset, "SOPInstanceUID"):
             datasets.append(dataset)
@@ -92,7 +91,7 @@ def _geometry(datasets: list[Any]) -> tuple[DicomGeometrySummary, list[QualityCh
         spacing_z = float(np.median(np.abs(diffs)))
         if not np.allclose(np.abs(diffs), spacing_z, atol=max(1e-3, spacing_z * 0.01)):
             warnings.append("Slice spacing is non-uniform")
-        if len(set(round(value, 5) for value in positions)) != len(positions):
+        if len({round(value, 5) for value in positions}) != len(positions):
             warnings.append("Duplicate slice positions detected")
     else:
         spacing_z = float(getattr(first, "SpacingBetweenSlices", 0.0) or getattr(first, "SliceThickness", 0.0) or 0.0)
@@ -132,9 +131,9 @@ def parse_imaging_study(
     if not datasets:
         raise ValueError(f"No CT or MR DICOM instances found in {directory}")
     series_counts = Counter(str(getattr(item, "SeriesInstanceUID", "")) for item in datasets)
-    selected_series = sorted(series_counts, key=lambda key: (-series_counts[key], key))[0]
+    selected_series = min(series_counts, key=lambda key: (-series_counts[key], key))
     selected = [item for item in datasets if str(getattr(item, "SeriesInstanceUID", "")) == selected_series]
-    first = sorted(selected, key=lambda item: str(getattr(item, "SOPInstanceUID", "")))[0]
+    first = min(selected, key=lambda item: str(getattr(item, "SOPInstanceUID", "")))
     modality = cast(Literal["CT", "MR"], str(getattr(first, "Modality", "")).upper())
     study_date = _iso_dicom_date(getattr(first, "StudyDate", ""))
     tool = _tool(image_evidence_path)
@@ -157,7 +156,7 @@ def parse_imaging_study(
         warnings.append("Multiple CT/MR series were found; the largest SeriesInstanceUID group was selected")
     if not str(getattr(first, "PatientID", "")):
         errors.append("DICOM PatientID is missing")
-    elif str(getattr(first, "PatientID")) != patient_id:
+    elif str(first.PatientID) != patient_id:
         errors.append("DICOM PatientID does not match the research pseudonym")
     quality_status: QualityStatus = "fail" if errors else "warning" if warnings else "pass"
     geometry_qc = QualityEvidence(status=quality_status, spacing_mm=geometry.spacing_mm, checks=checks, warnings=warnings, errors=errors)
@@ -180,7 +179,7 @@ def parse_imaging_study(
             warnings.extend(measured.quality.warnings)
             if modality == "MR":
                 seg_warning.append("MR SEG measurements use geometry only; no DWI, ADC, or enhancement interpretation is performed")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             errors.append(f"SEG quantitative processing failed: {exc}")
     if tool is None and not quantitative:
         warnings.append("No structured image-tool observations or SEG measurements were supplied")

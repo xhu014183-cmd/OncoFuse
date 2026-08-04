@@ -127,7 +127,7 @@ def register_volumes(
         mask_path = output / "followup_to_baseline_tumor_mask.nii.gz"
         sitk.WriteImage(moved_image, str(image_path))
         sitk.WriteImage(moved_mask, str(mask_path))
-    except Exception as exc:  # fail-closed boundary: any registration error blocks
+    except Exception as exc:  # noqa: BLE001  # fail-closed boundary
         warnings.append(f"Rigid registration failed: {exc}")
         return RegistrationOutcome(
             evidence=RegistrationEvidence(

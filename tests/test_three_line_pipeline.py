@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 import numpy as np
 import pydicom
 from pydicom.dataset import FileDataset, FileMetaDataset
 from pydicom.uid import CTImageStorage, ExplicitVRLittleEndian, generate_uid
 
-from hcc_multimodal.case_summary import render_case_markdown, summarize_case
 from hcc_multimodal.case_llm import render_with_optional_llm
 from hcc_multimodal.case_models import ImageToolEvidence
+from hcc_multimodal.case_summary import render_case_markdown, summarize_case
 from hcc_multimodal.clinical_labs import parse_laboratory_report
 from hcc_multimodal.hpi import parse_hpi_timeline
 from hcc_multimodal.imaging_adapter import parse_imaging_study

@@ -1,37 +1,36 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 import json
 import math
 import os
 import re
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
 
 from .reporting import write_human_markdown
 from .schemas import PIPELINE_VERSION, SCHEMA_VERSION, ControlledReport
 
-
 NUMBER_RE = re.compile(r"(?<![A-Za-z_])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
 BOUNDARY_PATTERNS = {
     "DIAGNOSTIC_ASSERTION": [
-        re.compile(r"\b(?:diagnos(?:e|ed|is)|confirm(?:s|ed)?|definitive)\b.{0,40}\b(?:HCC|cancer|carcinoma)\b", re.I),
+        re.compile(r"\b(?:diagnos(?:e|ed|is)|confirm(?:s|ed)?|definitive)\b.{0,40}\b(?:HCC|cancer|carcinoma)\b", re.IGNORECASE),
         re.compile(r"(?:诊断为|确诊|证实为).{0,20}(?:HCC|肝癌|肝细胞癌)"),
     ],
     "STAGING_OR_RESPONSE_ASSERTION": [
-        re.compile(r"\b(?:BCLC|LI-RADS|LR-[1-5M]|m?RECIST)\b", re.I),
+        re.compile(r"\b(?:BCLC|LI-RADS|LR-[1-5M]|m?RECIST)\b", re.IGNORECASE),
         re.compile(r"(?:分期为|属于.{0,8}期)"),
     ],
     "TREATMENT_RECOMMENDATION": [
-        re.compile(r"\b(?:recommend|should|advise|initiate|start)\b.{0,50}\b(?:treat|therapy|surgery|ablation|drug|dose)\w*\b", re.I),
+        re.compile(r"\b(?:recommend|should|advise|initiate|start)\b.{0,50}\b(?:treat|therapy|surgery|ablation|drug|dose)\w*\b", re.IGNORECASE),
         re.compile(r"(?:建议|推荐|应当|需要).{0,30}(?:治疗|用药|手术|消融|剂量)"),
     ],
     "PROMPT_INJECTION_ECHO": [
-        re.compile(r"ignore (?:all |the )?(?:previous|prior|system) instructions", re.I),
+        re.compile(r"ignore (?:all |the )?(?:previous|prior|system) instructions", re.IGNORECASE),
         re.compile(r"忽略.{0,12}(?:之前|系统|上述).{0,8}(?:指令|提示)"),
     ],
 }
@@ -47,7 +46,7 @@ def _extract_json(content: str) -> dict[str, Any]:
         raise ValueError("LLM response does not contain a JSON object")
     parsed = json.loads(cleaned[start : end + 1])
     if not isinstance(parsed, dict):
-        raise ValueError("LLM response JSON must be an object")
+        raise TypeError("LLM response JSON must be an object")
     return parsed
 
 
@@ -241,12 +240,12 @@ def build_template_report(
     if "longitudinal_comparison" in imaging:
         comparison = imaging["longitudinal_comparison"]
         imaging_summary = [
-            f"Longitudinal imaging category: {comparison['category']}; "
+            f"Longitudinal imaging category: {comparison['category']}; "  # noqa: ISC004
             f"volume change: {comparison['volume_change_pct']}%."
         ]
     else:
         imaging_summary = [
-            f"Supplied mask contains {imaging['mass_region_count']} retained region(s), "
+            f"Supplied mask contains {imaging['mass_region_count']} retained region(s), "  # noqa: ISC004
             f"total volume {imaging['annotated_mass_volume_ml']} mL."
         ]
     laboratory_summary = []
@@ -351,7 +350,7 @@ def run_deepseek_audit(
     result: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "pipeline_version": PIPELINE_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "sources": [
             {"source_id": Path(prompt_path).name, "source_type": "validated_prompt_bundle"},
             {"source_id": Path(verdict_path).name, "source_type": "clinical_verdict"},
