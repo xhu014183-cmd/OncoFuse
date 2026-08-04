@@ -73,5 +73,5 @@ check_untyped_defs = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["scipy", "scipy.*", "torch", "torch.*", "transformers", "transformers.*", "monai", "monai.*", "SimpleITK", "SimpleITK.*"]
+module = ["scipy", "scipy.*", "torch", "torch.*", "transformers", "transformers.*", "monai", "monai.*", "SimpleITK", "SimpleITK.*", "idc_index", "idc_index.*", "nibabel", "nibabel.*"]
 ignore_missing_imports = true
