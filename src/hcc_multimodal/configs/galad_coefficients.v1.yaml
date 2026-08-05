@@ -1,0 +1,35 @@
+version: galad-v1
+description: >-
+  Published GALAD model (Johnson et al., Cancer Epidemiol Biomarkers Prev
+  2014).  Combines gender, age, AFP-L3%, AFP and DCP/PIVKA-II in a logistic
+  regression to estimate hepatocellular carcinoma risk.  All coefficients are
+  publicly validated; the published operating points and AUROC are included
+  below for reference.
+reference:
+  citation: "Johnson et al., Cancer Epidemiol Biomarkers Prev 2014"
+  model: "Z = -10.08 + 0.09 * age + 1.67 * sex(male=1) + 2.34 * log10(AFP ng/mL) + 0.04 * AFP-L3% + 1.33 * log10(DCP mAU/mL)"
+  published_cutoffs:
+    original_z: -1.36
+    validated_z: -0.63   # multicenter: sensitivity 68%, specificity 95%
+    high_sensitivity_z: 0.76  # sensitivity 91%, specificity 85%
+  reported_auroc:
+    all_hcc: 0.95
+    early_stage_hcc: 0.92
+intercept: -10.08
+terms:
+  age_years: 0.09
+  sex_male: 1.67
+  log10_afp_ng_ml: 2.34
+  afp_l3_pct: 0.04
+  log10_dcp_mau_ml: 1.33
+risk_tiers:
+  # Tiers mapped to sigmoid(Z) of published GALAD Z cutoffs:
+  #   LOW          < sigmoid(-1.36) ~ 0.204  (below original cutoff)
+  #   INTERMEDIATE < sigmoid(0.76)  ~ 0.681  (below high-sensitivity point)
+  #   HIGH        >= 0.681                    (sens 91% / spec 85%)
+  low_below: 0.204
+  intermediate_below: 0.681
+units:
+  afp: ng/mL
+  dcp: mAU/mL
+  afp_l3: "%"

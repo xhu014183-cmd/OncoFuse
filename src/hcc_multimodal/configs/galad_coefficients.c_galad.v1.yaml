@@ -1,0 +1,35 @@
+version: c-galad-v1
+description: >-
+  C-GALAD: illustrative Chinese-cohort style re-fit of the GALAD model
+  (HBV-predominant HCC population).  Pass this file as coefficients_path to
+  calculate_galad_score / calculate_galad_from_values to compare cohort-
+  specific behavior.
+  WARNING: the coefficient provenance has NOT yet been verified against a
+  specific publication, and the risk tiers below are inherited from the
+  original GALAD purely for demo consistency.  Treat this configuration as
+  illustrative and uncalibrated until a citation is confirmed and
+  cohort-specific cutoffs are derived.
+reference:
+  model: "C-GALAD: Z = -11.501 + 0.733*sex(1=male) + 0.099*age + 0.073*AFP-L3% + 0.840*log10(AFP) + 2.346*log10(DCP)"
+  citation: >-
+    pending verification; candidate: Chen P et al., Validation of the GALAD
+    model and establishment of a new model for HCC detection in Chinese
+    patients, Front Oncol 2022, doi:10.3389/fonc.2022.1037742 (note: that
+    paper's refit model is GAADPB and does NOT match these coefficients).
+  calibrated: false
+intercept: -11.501
+terms:
+  age_years: 0.099
+  sex_male: 0.733
+  log10_afp_ng_ml: 0.840
+  afp_l3_pct: 0.073
+  log10_dcp_mau_ml: 2.346
+risk_tiers:
+  # Inherited from the original GALAD (sigmoid of its z cutoffs) for demo
+  # consistency only; NOT validated for this coefficient set.
+  low_below: 0.204
+  intermediate_below: 0.681
+units:
+  afp: ng/mL
+  dcp: mAU/mL
+  afp_l3: "%"
