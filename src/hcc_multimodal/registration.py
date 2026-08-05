@@ -31,11 +31,13 @@ def simpleitk_available() -> bool:
 
 def _mask_centroid_world(path: Path) -> np.ndarray | None:
     image = nib.load(str(path))
-    data = np.asarray(image.dataobj) > 0  # type: ignore[attr-defined]
+    if not isinstance(image, nib.spatialimages.SpatialImage):
+        return None
+    data = np.asarray(image.dataobj) > 0
     if not data.any():
         return None
     centroid_voxel = np.argwhere(data).mean(axis=0)
-    return np.asarray(nib.affines.apply_affine(image.affine, centroid_voxel), dtype=float)  # type: ignore[attr-defined]
+    return np.asarray(nib.affines.apply_affine(image.affine, centroid_voxel), dtype=float)
 
 
 def register_volumes(
