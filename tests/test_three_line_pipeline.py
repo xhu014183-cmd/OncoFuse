@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -183,17 +184,17 @@ def test_cli_parse_labs_smoke(tmp_path: Path):
     source = tmp_path / "labs.txt"
     source.write_text("2026-07-20 AFP 5 ng/mL 0-7\n", encoding="utf-8")
     output = tmp_path / "labs.json"
-    completed = subprocess.run([str(Path(".venv/Scripts/python.exe")), "-m", "hcc_multimodal.cli", "parse-labs", "--input", str(source), "--patient-id", "P1", "--output", str(output)], check=True, capture_output=True, text=True)
+    completed = subprocess.run([sys.executable, "-m", "hcc_multimodal.cli", "parse-labs", "--input", str(source), "--patient-id", "P1", "--output", str(output)], check=True, capture_output=True, text=True)
     assert output.exists()
     assert "Wrote" in completed.stdout
 
 
 def test_cli_analyze_case_with_generated_dicom_seg(tmp_path: Path):
     fixture = tmp_path / "fixture"
-    subprocess.run([str(Path(".venv/Scripts/python.exe")), "examples/generate_dicom_seg_fixture.py", "--output", str(fixture)], check=True, capture_output=True, text=True)
+    subprocess.run([sys.executable, "examples/generate_dicom_seg_fixture.py", "--output", str(fixture)], check=True, capture_output=True, text=True)
     output = tmp_path / "output"
     subprocess.run([
-        str(Path(".venv/Scripts/python.exe")), "-m", "hcc_multimodal.cli", "analyze-case",
+        sys.executable, "-m", "hcc_multimodal.cli", "analyze-case",
         "--dicom-dir", str(fixture / "study"), "--seg", str(fixture / "seg.dcm"),
         "--image-evidence", "examples/image_evidence.synthetic.json", "--labs", "examples/lab_report.synthetic.txt",
         "--hpi", "examples/hpi.synthetic.txt", "--patient-id", "RESEARCH_001", "--output", str(output),
