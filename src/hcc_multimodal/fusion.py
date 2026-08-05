@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 import yaml
 
+from .galad import GALADResult
 from .schemas import (
     ClinicalVerdict,
     Concordance,
@@ -69,12 +70,28 @@ def _trace(
     )
 
 
+def _galad_context(
+    galad: GALADResult | None,
+    rules: dict[str, Any],
+) -> tuple[bool, str]:
+    """Return (is_high_tier, high_tier_label) for an optional GALAD result."""
+    galad_cfg = rules.get("galad") or {}
+    high_tier = str(galad_cfg.get("high_tier", "HIGH"))
+    is_high = (
+        galad is not None
+        and galad.status == "calculated"
+        and galad.risk_tier == high_tier
+    )
+    return is_high, high_tier
+
+
 def fuse_evidence(
     labs: LabEvidence,
     imaging: LongitudinalImagingEvidence,
     *,
     treatment_events: list[dict[str, Any]] | None = None,
     treatment_context: Literal["none", "index_treatment"] = "none",
+    galad: GALADResult | None = None,
     rules_path: str | Path | None = None,
 ) -> ClinicalVerdict:
     """Fuse validated evidence through versioned, fully traceable research rules."""
@@ -176,6 +193,33 @@ def fuse_evidence(
         elif marker.direction in {"insufficient", "indeterminate"}:
             missing.append(f"{name} numeric trend is {marker.direction}")
 
+    galad_high, _ = _galad_context(galad, rules)
+    if galad is not None:
+        traces.append(
+            _trace(
+                "FUSION.GALAD.RISK_TIER",
+                "fired" if galad_high else "not_fired",
+                [f"{galad.patient_id}:galad:{galad.coefficient_version}"],
+                (
+                    f"GALAD-style score {galad.score:.3f} is in the {galad.risk_tier} tier"
+                    if galad.status == "calculated" and galad.score is not None
+                    else f"GALAD-style scoring is incomplete; missing {galad.missing_inputs}"
+                ),
+                version,
+            )
+        )
+        if galad_high:
+            supporting.append(
+                f"GALAD-style serological risk score {galad.score:.3f} is in the HIGH tier "
+                f"(coefficient set {galad.coefficient_version}, illustrative)"
+            )
+            reasons.append("GALAD_HIGH_RISK_TIER")
+        elif galad.status == "incomplete":
+            missing.append(
+                "GALAD-style risk scoring is incomplete "
+                f"(missing: {', '.join(galad.missing_inputs)})"
+            )
+
     imaging_progression = not imaging_blocked and imaging.category == rules["imaging"]["progression_category"]
     imaging_response = not imaging_blocked and imaging.category == rules["imaging"]["response_category"]
     traces.append(
@@ -259,6 +303,7 @@ def fuse_cross_sectional_evidence(
     labs: LabEvidence,
     imaging: ImagingEvidence,
     *,
+    galad: GALADResult | None = None,
     rules_path: str | Path | None = None,
 ) -> ClinicalVerdict:
     """Fuse an explicitly unpaired public-image/synthetic-lab PoC without clinical claims."""
@@ -302,7 +347,85 @@ def fuse_cross_sectional_evidence(
         if name not in labs.markers:
             missing.append(f"{name} evidence is unavailable")
 
-    if has_segmented_mass and marker_signals:
+    galad_high, _ = _galad_context(galad, rules)
+    occult_extent = float((rules.get("galad") or {}).get("occult_lesion_max_extent_mm", 10))
+    imaging_valid = imaging.quality.status != "fail"
+    occult_imaging = imaging_valid and (
+        not has_segmented_mass
+        or (
+            imaging.max_lesion_extent_mm is not None
+            and imaging.max_lesion_extent_mm < occult_extent
+        )
+    )
+    if galad is not None:
+        galad_ref = f"{galad.patient_id}:galad:{galad.coefficient_version}"
+        imaging_ref = f"{imaging.patient_id}:imaging:{imaging.study_date}"
+        galad_explanation = (
+            f"GALAD-style score {galad.score:.3f} is in the {galad.risk_tier} tier"
+            if galad.status == "calculated" and galad.score is not None
+            else f"GALAD-style scoring is incomplete; missing {galad.missing_inputs}"
+        )
+        imaging_state = (
+            "occult/tiny"
+            if occult_imaging
+            else "positive"
+            if has_segmented_mass
+            else "unassessable"
+        )
+        traces.append(
+            _trace(
+                "FUSION.GALAD.HIGH_RISK_OCCULT_IMAGING",
+                "fired" if galad_high and occult_imaging else "not_fired",
+                [galad_ref, imaging_ref],
+                f"{galad_explanation}; imaging is {imaging_state}",
+                version,
+            )
+        )
+        traces.append(
+            _trace(
+                "FUSION.GALAD.HIGH_RISK_IMAGING_MASS",
+                "fired" if galad_high and has_segmented_mass and not occult_imaging else "not_fired",
+                [galad_ref, imaging_ref],
+                f"{galad_explanation}; segmented mass present={has_segmented_mass}",
+                version,
+            )
+        )
+        if galad.status == "incomplete":
+            missing.append(
+                "GALAD-style risk scoring is incomplete "
+                f"(missing: {', '.join(galad.missing_inputs)})"
+            )
+        if galad_high and not imaging_valid:
+            missing.append(
+                "imaging quality is fail; GALAD occult-imaging rule cannot be assessed"
+            )
+
+    if galad_high and occult_imaging:
+        # Rule A: high serological risk without an actionable imaging finding
+        assert galad is not None  # galad_high implies a computed GALAD result
+        state = "galad_high_risk_occult_imaging"
+        reasons.append("TRIGGER_HIGH_SENSITIVITY_IMAGING")
+        supporting.append(
+            f"GALAD-style HIGH serological risk (score {galad.score:.3f}) with no "
+            f"segmented lesion reaching {occult_extent:g} mm; the research workflow "
+            "flags this case for higher-sensitivity imaging review (e.g., contrast MRI)"
+        )
+    elif galad_high and has_segmented_mass:
+        # Rule B: high serological risk concordant with a segmented lesion
+        assert galad is not None  # galad_high implies a computed GALAD result
+        state = "high_concordance_hcc_suspect"
+        reasons.append("HIGH_CONCORDANCE_HCC_SUSPECT")
+        extent_text = (
+            f"{imaging.max_lesion_extent_mm:g}"
+            if imaging.max_lesion_extent_mm is not None
+            else "unavailable"
+        )
+        supporting.append(
+            f"GALAD-style HIGH serological risk (score {galad.score:.3f}) is concordant "
+            f"with {imaging.lesion_count} segmented lesion(s) "
+            f"(max extent {extent_text} mm)"
+        )
+    elif has_segmented_mass and marker_signals:
         state = "cross_sectional_lesion_marker_signal"
     elif has_segmented_mass:
         state = "segmented_lesion_without_marker_signal"
@@ -343,6 +466,17 @@ def fuse_cross_sectional_evidence(
                 source_id=f"{labs.patient_id}:synthetic_labs",
                 source_type="laboratory_evidence",
                 data_origin="synthetic",
+            ),
+            *(
+                [
+                    SourceReference(
+                        source_id=f"{galad.patient_id}:galad:{galad.coefficient_version}",
+                        source_type="galad_style_risk_score",
+                        data_origin="derived_illustrative",
+                    )
+                ]
+                if galad is not None
+                else []
             ),
         ],
     )

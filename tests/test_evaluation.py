@@ -46,7 +46,7 @@ def test_patient_level_evaluation_reports_three_deterministic_baselines():
     cohort = EvaluationCohort.model_validate(_payload())
     result = evaluate_cohort(cohort, bootstrap_iterations=50, seed=7)
     assert result["patient_count"] == 24
-    assert set(result["baselines"]) == {"image_only", "lab_only", "rule_fusion"}
+    assert set(result["baselines"]) == {"image_only", "lab_only", "rule_fusion", "galad"}
     assert result["baselines"]["rule_fusion"]["metrics"]["auroc"] == 1.0
     assert result["baselines"]["rule_fusion"]["bootstrap_95_ci"]["auroc"] == [1.0, 1.0]
     assert result["baselines"]["rule_fusion"]["performance_claim_permitted"] is False

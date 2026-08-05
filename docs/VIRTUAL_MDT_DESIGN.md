@@ -173,3 +173,36 @@ Stance = Literal[
 2. stance 词表 4 个枚举是否够用？是否需要 `mixed_signals`（部分指标升部分降）？
 3. 看板是否就按"4 科室卡片 + 一致性矩阵 + 主治医师综合"的布局？是否需要第二轮时间轴视图？
 4. LLM 润色是一期就上（复用 GLM-4-flash），还是先纯确定性模板跑通再加？
+
+## 12. GALAD 血清学风险分层卡片（2026-08-03 新增）
+
+检验科 Agent 的证据输入扩展了 GALAD 式风险评分（`hcc_multimodal.galad`），
+看板新增对应风险卡片，演示页见 `demo-output/galad/galad_card.html`。
+
+**卡片内容**
+
+- Gauge 仪表盘：0~1 风险评分，色带锚定 GALAD 发表切点的 sigmoid 映射：
+  LOW < 0.204（Z=-1.36 原始切点）≤ INTERMEDIATE < 0.681 ≤ HIGH（Z=0.76，
+  敏感度 91%/特异度 85% 工作点）
+- 输入回显：年龄、性别、AFP (ng/mL)、AFP-L3% (%)、PIVKA-II (mAU/mL)
+- 各因子贡献度条形图（占非截距项 |贡献| 比例）
+- 跨模态联动规则提示（fusion-v1.1）：
+  - 规则 A：`GALAD HIGH + 影像阴性/微小占位 (<10mm)` → `TRIGGER_HIGH_SENSITIVITY_IMAGING`，
+    提示调高影像敏感度 / 建议 MRI 增强复查
+  - 规则 B：`GALAD HIGH + 影像明确占位` → `HIGH_CONCORDANCE_HCC_SUSPECT`（高度疑似 HCC）
+- 显著位置免责声明："GALAD 评分仅用于多模态风险分层演示，不作为临床确诊或治疗推荐依据"
+
+**工程边界**
+
+- 直接使用已发表 GALAD 模型（Johnson et al., Cancer Epidemiol Biomarkers Prev
+  2014），全部分系数公开可验证：Z = -10.08 + 0.09·年龄 + 1.67·性别（男=1）
+  + 2.34·log₁₀AFP + 0.04·AFP-L3% + 1.33·log₁₀DCP。全分期 HCC AUROC 0.95，
+  早期 0.92，优于超声（0.82）。默认系数集
+  `src/hcc_multimodal/configs/galad_coefficients.v1.yaml`，另附
+  C-GALAD 中国人群再拟合参数集（`galad_coefficients.c_galad.v1.yaml`），
+  经 `coefficients_path` 一键切换。
+- 缺失任一血清学指标即 fail-closed 返回 `status=incomplete`，不做插补
+- 队列评估接入 `evaluation.py` 的 `galad_score` 基线（AUROC/敏感度/特异度/bootstrap CI），
+  合成队列结果仅作流程连通性检查（`performance_claim_permitted=false`）
+- LIS 接入走 `hcc_multimodal.adapters.lis_adapter.LISAdapter`（目录监听 + REST demo），
+  属演示 shim，非 HL7/FHIR 验证接口

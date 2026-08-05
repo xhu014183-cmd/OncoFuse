@@ -1,4 +1,4 @@
-version: fusion-v1
+version: fusion-v1.1
 laboratory:
   required_markers: [AFP, DCP]
   max_evidence_age_days: 90
@@ -11,3 +11,10 @@ quality:
   acceptable_pairing_statuses: [same_subject]
 treatment:
   intervening_event_blocks_concordance: true
+galad:
+  # GALAD-style serological risk tiers that participate in cross-modal rules
+  high_tier: HIGH
+  # Segmented lesions smaller than this (mm) count as "occult/tiny" imaging
+  # for Rule A (high serological risk with no actionable imaging finding)
+  occult_lesion_max_extent_mm: 10
+

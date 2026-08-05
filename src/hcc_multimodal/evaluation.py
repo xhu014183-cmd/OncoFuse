@@ -37,6 +37,7 @@ class CohortRecord(JsonModel):
     image_only_score: float | None = Field(default=None, ge=0, le=1)
     lab_only_score: float | None = Field(default=None, ge=0, le=1)
     rule_fusion_score: float | None = Field(default=None, ge=0, le=1)
+    galad_score: float | None = Field(default=None, ge=0, le=1)
     treatment_events: list[dict[str, Any]] = Field(default_factory=list)
     missing_reasons: list[str] = Field(default_factory=list)
 
@@ -203,6 +204,7 @@ def evaluate_cohort(
                 ("image_only", "image_only_score"),
                 ("lab_only", "lab_only_score"),
                 ("rule_fusion", "rule_fusion_score"),
+                ("galad", "galad_score"),
             )
         )
     }
@@ -224,6 +226,7 @@ def evaluate_cohort(
                         ("image_only", "image_only_score"),
                         ("lab_only", "lab_only_score"),
                         ("rule_fusion", "rule_fusion_score"),
+                        ("galad", "galad_score"),
                     )
                 )
             }
