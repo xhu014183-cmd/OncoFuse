@@ -232,21 +232,19 @@ def test_c_galad_alternative_parameter_set():
 def test_custom_coefficients_are_respected(tmp_path: Path):
     custom = tmp_path / "coeffs.yaml"
     custom.write_text(
-        "\n".join(
-            [
-                "version: galad-test-v9",
-                "intercept: 0.0",
-                "terms:",
-                "  age_years: 0.0",
-                "  sex_male: 0.0",
-                "  log10_afp_ng_ml: 1.0",
-                "  afp_l3_pct: 0.0",
-                "  log10_dcp_mau_ml: 0.0",
-                "risk_tiers:",
-                "  low_below: 0.3",
-                "  intermediate_below: 0.7",
-            ]
-        ),
+        """\
+version: galad-test-v9
+intercept: 0.0
+terms:
+  age_years: 0.0
+  sex_male: 0.0
+  log10_afp_ng_ml: 1.0
+  afp_l3_pct: 0.0
+  log10_dcp_mau_ml: 0.0
+risk_tiers:
+  low_below: 0.3
+  intermediate_below: 0.7
+""",
         encoding="utf-8",
     )
     result = calculate_galad_from_values(

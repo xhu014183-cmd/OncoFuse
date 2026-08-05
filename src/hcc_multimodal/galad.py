@@ -20,8 +20,8 @@ with the offending fields listed -- no silent imputation is ever performed.
 
 from __future__ import annotations
 
-from datetime import date
 import math
+from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
@@ -83,7 +83,7 @@ def load_galad_coefficients(path: str | Path | None = None) -> dict[str, Any]:
     source = Path(path) if path is not None else DEFAULT_COEFFICIENTS_PATH
     payload = yaml.safe_load(source.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or not isinstance(payload.get("version"), str):
-        raise ValueError(f"Invalid GALAD coefficient configuration: {source}")
+        raise ValueError(f"Invalid GALAD coefficient configuration: {source}")  # noqa: TRY004
     terms = payload.get("terms")
     required = {
         "age_years",
@@ -93,13 +93,17 @@ def load_galad_coefficients(path: str | Path | None = None) -> dict[str, Any]:
         "log10_dcp_mau_ml",
     }
     if not isinstance(payload.get("intercept"), (int, float)):
-        raise ValueError(f"GALAD configuration lacks a numeric intercept: {source}")
+        raise ValueError(  # noqa: TRY004
+            f"GALAD configuration lacks a numeric intercept: {source}"
+        )
     if not isinstance(terms, dict) or not required.issubset(terms):
         raise ValueError(f"GALAD configuration lacks required terms {required}: {source}")
     tiers = payload.get("risk_tiers") or {}
     low, intermediate = tiers.get("low_below"), tiers.get("intermediate_below")
     if not (isinstance(low, (int, float)) and isinstance(intermediate, (int, float))):
-        raise ValueError(f"GALAD configuration lacks numeric risk tier cutoffs: {source}")
+        raise ValueError(  # noqa: TRY004
+            f"GALAD configuration lacks numeric risk tier cutoffs: {source}"
+        )
     if not 0.0 < low < intermediate < 1.0:
         raise ValueError(f"GALAD risk tier cutoffs must satisfy 0 < low < intermediate < 1: {source}")
     return payload
@@ -326,11 +330,11 @@ def calculate_galad_score(
 
 __all__ = [
     "DEFAULT_COEFFICIENTS_PATH",
+    "INTENDED_USE",
+    "REQUIRED_ANALYTES",
     "GALADInputs",
     "GALADResult",
     "GALADStatus",
-    "INTENDED_USE",
-    "REQUIRED_ANALYTES",
     "RiskTier",
     "calculate_galad_from_values",
     "calculate_galad_score",

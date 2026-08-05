@@ -21,11 +21,12 @@ interface and must not be connected to real clinical systems.
 from __future__ import annotations
 
 import json
+import tempfile
 import time
+from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import tempfile
-from typing import Any, Iterator
+from typing import Any
 
 from ..clinical_labs import parse_laboratory_report
 from ..galad import GALADResult, calculate_galad_score
@@ -198,7 +199,7 @@ class LISAdapter:
                 self.end_headers()
                 self.wfile.write(encoded)
 
-            def do_POST(self) -> None:  # noqa: N802 (http.server API)
+            def do_POST(self) -> None:
                 if self.path.rstrip("/") != "/api/v1/lis/ingest":
                     self._send_json(404, {"error": "unknown endpoint"})
                     return
@@ -221,7 +222,7 @@ class LISAdapter:
                         age_years=payload.get("age_years"),
                         sex=payload.get("sex"),
                     )
-                except Exception as exc:  # fail closed, never leak internals
+                except Exception as exc:  # noqa: BLE001 -- fail closed, never leak internals
                     self._send_json(422, {"error": f"ingestion failed: {type(exc).__name__}"})
                     return
                 self._send_json(200, result)
@@ -245,4 +246,4 @@ class LISAdapter:
         return server
 
 
-__all__ = ["LISAdapter", "SUPPORTED_SUFFIXES"]
+__all__ = ["SUPPORTED_SUFFIXES", "LISAdapter"]

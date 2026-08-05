@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-import pytest
 import threading
 import urllib.error
 import urllib.request
+from pathlib import Path
+
+import pytest
 
 from hcc_multimodal.adapters.lis_adapter import LISAdapter
 
