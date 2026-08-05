@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from pathlib import Path
 import json
+from pathlib import Path
 
 import pytest
 
-from hcc_multimodal.evaluation import EvaluationCohort, evaluate_cohort, evaluate_cohort_file
+from hcc_multimodal.evaluation import (
+    EvaluationCohort,
+    evaluate_cohort,
+    evaluate_cohort_file,
+)
 
 
 def _payload(record_count: int = 24) -> dict:

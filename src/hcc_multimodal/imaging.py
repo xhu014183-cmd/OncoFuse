@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import math
 from itertools import product
 from pathlib import Path
 from typing import Literal, cast
-import math
 
 import nibabel as nib
 import numpy as np
+import yaml
 from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
-import yaml
 
 from .schemas import (
     ImageGeometry,
@@ -25,7 +25,6 @@ from .schemas import (
     RegistrationEvidence,
     SourceReference,
 )
-
 
 DEFAULT_MATCHING_RULES_PATH = Path(__file__).with_name("configs") / "matching_rules.v1.yaml"
 

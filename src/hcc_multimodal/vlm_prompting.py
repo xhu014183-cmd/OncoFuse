@@ -9,7 +9,6 @@ from pydantic import Field
 from .case_models import ClinicalLabEvidence, HpiTimelineEvidence
 from .schemas import JsonModel
 
-
 IMAGE_PATCH_TOKEN = "<im_patch>"
 VISUAL_TOKEN_COUNT = 32
 RESEARCH_DISCLAIMER = (

@@ -2,24 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 import json
-from pathlib import Path
 import re
+from datetime import date, timedelta
+from pathlib import Path
 from typing import Any, Literal, cast
 
 from .case_models import (
+    ClinicalLabEvidence,
+    EvidenceConcordance,
     HpiEvent,
     HpiEventType,
     HpiTimelineEvidence,
+    ImagingInterpretationEvidence,
     MarkerTrajectorySummary,
-    EvidenceConcordance,
     SourceSpan,
 )
 from .clinical_labs import _date
-from .case_models import ClinicalLabEvidence, ImagingInterpretationEvidence
 from .schemas import QualityCheck, QualityEvidence, QualityStatus, SourceReference
-
 
 DATE_RE = re.compile(r"(?P<date>20\d{2}[-/]\d{1,2}[-/]\d{1,2}|20\d{2}" + "\u5e74" + r"\d{1,2}" + "\u6708" + r"\d{1,2}" + "\u65e5)" )
 RELATIVE_RE = re.compile(r"(?:post[- ]?op|post[- ]?treatment|" + "\u672f\u540e" + "|" + "\u6cbb\u7597\u540e" + r")\s*(?P<number>\d+|[\u4e00\u4e8c\u4e24\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]+)\s*(?P<unit>day|days|week|weeks|month|months|" + "\u5929" + "|" + "\u5468" + "|" + "\u4e2a?\u6708" + ")", re.IGNORECASE)

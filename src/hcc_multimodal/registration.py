@@ -31,11 +31,11 @@ def simpleitk_available() -> bool:
 
 def _mask_centroid_world(path: Path) -> np.ndarray | None:
     image = nib.load(str(path))
-    data = np.asarray(image.dataobj) > 0
+    data = np.asarray(image.dataobj) > 0  # type: ignore[attr-defined]
     if not data.any():
         return None
     centroid_voxel = np.argwhere(data).mean(axis=0)
-    return np.asarray(nib.affines.apply_affine(image.affine, centroid_voxel), dtype=float)
+    return np.asarray(nib.affines.apply_affine(image.affine, centroid_voxel), dtype=float)  # type: ignore[attr-defined]
 
 
 def register_volumes(
@@ -127,7 +127,7 @@ def register_volumes(
         mask_path = output / "followup_to_baseline_tumor_mask.nii.gz"
         sitk.WriteImage(moved_image, str(image_path))
         sitk.WriteImage(moved_mask, str(mask_path))
-    except Exception as exc:  # fail-closed boundary: any registration error blocks
+    except Exception as exc:  # noqa: BLE001  # fail-closed boundary
         warnings.append(f"Rigid registration failed: {exc}")
         return RegistrationOutcome(
             evidence=RegistrationEvidence(

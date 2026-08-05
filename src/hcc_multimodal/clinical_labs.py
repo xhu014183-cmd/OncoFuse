@@ -7,14 +7,14 @@ values which cannot be normalized are retained as rejected observations.
 
 from __future__ import annotations
 
-from collections import defaultdict
-from datetime import date
 import csv
 import io
 import json
 import math
-from pathlib import Path
 import re
+from collections import defaultdict
+from datetime import date
+from pathlib import Path
 from typing import Any, cast
 
 from .case_models import (
@@ -27,8 +27,13 @@ from .case_models import (
     SourceSpan,
     TrajectoryState,
 )
-from .schemas import Comparator, QualityCheck, QualityEvidence, QualityStatus, SourceReference
-
+from .schemas import (
+    Comparator,
+    QualityCheck,
+    QualityEvidence,
+    QualityStatus,
+    SourceReference,
+)
 
 NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 VALUE_RE = re.compile(rf"(?P<cmp><=|>=|<|>)?\s*(?P<number>{NUMBER})")
@@ -220,12 +225,12 @@ def _rows_from_payload(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return [row for row in payload if isinstance(row, dict)]
     if not isinstance(payload, dict):
-        raise ValueError("JSON laboratory input must be an object or array")
+        raise TypeError("JSON laboratory input must be an object or array")
     rows = payload.get("observations") or payload.get("results") or payload.get("testResultInfos")
     if rows is None:
         rows = [payload]
     if not isinstance(rows, list):
-        raise ValueError("Laboratory observations must be an array")
+        raise TypeError("Laboratory observations must be an array")
     return [row for row in rows if isinstance(row, dict)]
 
 

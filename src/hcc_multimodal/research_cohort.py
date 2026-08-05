@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import json
+import subprocess
 from collections import Counter
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal
-import json
-import subprocess
 
 import yaml
 
@@ -26,7 +26,6 @@ from .research_models import (
 )
 from .schemas import QualityCheck, QualityEvidence, QualityStatus, SourceReference
 from .tcia import convert_ct_and_mass_seg
-
 
 PHI_KEYWORDS = (
     "PatientName",
@@ -155,7 +154,7 @@ def _inspect_study(
     for path in files:
         try:
             dataset = pydicom.dcmread(str(path), stop_before_pixels=True)
-        except Exception:
+        except Exception:  # noqa: BLE001
             errors.append(f"CT_DICOM_UNREADABLE:{study.study_id}:{path.name}")
             continue
         if str(getattr(dataset, "PatientID", "")) != patient_id:
@@ -178,7 +177,7 @@ def _inspect_study(
 
     try:
         segmentation = pydicom.dcmread(str(seg_file), stop_before_pixels=True)
-    except Exception:
+    except Exception:  # noqa: BLE001
         errors.append(f"SEG_DICOM_UNREADABLE:{study.study_id}:{seg_file.name}")
         return sorted(set(errors)), sorted(set(phi_findings))
     if str(getattr(segmentation, "PatientID", "")) != patient_id:
@@ -259,7 +258,7 @@ def validate_research_cohort(
                 if labs.quality.status in {"fail", "unavailable"}:
                     messages.append("LAB_EVIDENCE_UNAVAILABLE")
                 messages.extend(f"LAB_WARNING:{warning}" for warning in labs.warnings)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             technical_errors.append(f"LAB_FILE_INVALID:{type(exc).__name__}")
 
         if phi_findings:
@@ -512,7 +511,7 @@ def build_research_cohort(
             )
             labs_path = _resolve_contained(root, case.labs_file, f"{case.patient_id}.labs_file")
             full_labs = load_lab_evidence(labs_path)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             runs.append(
                 ResearchCaseRun(
                     patient_id=case.patient_id,
@@ -597,7 +596,7 @@ def build_research_cohort(
                         artifact_directory=study_output.relative_to(output).as_posix(),
                     )
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 followup_runs.append(
                     FollowupRunRecord(
                         study_id=study.study_id,

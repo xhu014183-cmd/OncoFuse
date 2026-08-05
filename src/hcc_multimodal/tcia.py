@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
-from collections import Counter
-from datetime import datetime, timezone
 import json
 import os
 import sys
+from collections import Counter
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 import nibabel as nib
 import numpy as np
 from scipy import ndimage
 
 from .schemas import PIPELINE_VERSION, SCHEMA_VERSION
-
 
 COLLECTION_ID = "hcc_tace_seg"
 COLLECTION_DOI = "https://doi.org/10.7937/TCIA.5FNA-0924"
@@ -252,10 +251,10 @@ def convert_ct_and_mass_seg(
                 referenced_counts[_acquisition_id(ct_by_uid[uid])] += 1
     if not referenced_counts:
         raise ValueError("Mass SEG frames do not reference any supplied CT instances")
-    selected_acquisition = sorted(
+    selected_acquisition = min(
         referenced_counts,
         key=lambda key: (-referenced_counts[key], key),
-    )[0]
+    )
     selected_datasets = [
         dataset for dataset in ct_by_uid.values() if _acquisition_id(dataset) == selected_acquisition
     ]
@@ -394,7 +393,7 @@ def convert_ct_and_mass_seg(
     attribution = {
         "schema_version": SCHEMA_VERSION,
         "pipeline_version": PIPELINE_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "collection": "HCC-TACE-Seg",
         "collection_idc_id": COLLECTION_ID,
         "collection_doi": COLLECTION_DOI,
@@ -480,7 +479,7 @@ def write_composite_labs(
     payload = {
         "schema_version": SCHEMA_VERSION,
         "pipeline_version": PIPELINE_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "sources": [
             {"source_id": f"synthetic-{scenario_id}", "source_type": "synthetic_laboratory"}
         ],

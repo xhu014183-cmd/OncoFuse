@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Literal
 import csv
 import io
 import json
+from collections import Counter, defaultdict
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Literal
 
 import numpy as np
 
@@ -24,13 +24,12 @@ from .research_models import (
     ExternalTestUnlockAudit,
     FollowupRunRecord,
     PatientEndpointResult,
-    ReviewLabel,
     ResearchCaseRun,
     ResearchEvaluationArtifact,
     ResearchRunManifest,
+    ReviewLabel,
 )
 from .schemas import QualityCheck, QualityEvidence, QualityStatus, SourceReference
-
 
 BASELINE_FIELDS = {
     "image_only": "image_only_score",
@@ -450,8 +449,10 @@ def _write_research_report(artifact: ResearchEvaluationArtifact, path: Path) -> 
             "## Missingness and sensitivity",
             "",
             f"- Missing patterns: {json.dumps(artifact.missingness.get('patterns', {}), sort_keys=True)}",
-            "- Indeterminate endpoints are excluded from the primary analysis and evaluated "
-            "under both positive and negative boundary assumptions in evaluation.json.",
+            (
+                "- Indeterminate endpoints are excluded from the primary analysis and evaluated "
+                "under both positive and negative boundary assumptions in evaluation.json."
+            ),
             "",
             "## Interpretation boundary",
             "",
@@ -506,7 +507,7 @@ def evaluate_research_cohort(
             configuration_hash=run.configuration_hash,
             git_commit=run.git_commit,
             external_test_center_ids=run.external_test_center_ids,
-            unlocked_at=datetime.now(timezone.utc),
+            unlocked_at=datetime.now(UTC),
             sources=[
                 SourceReference(
                     source_id=Path(run_path).name,

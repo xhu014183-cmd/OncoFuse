@@ -8,7 +8,6 @@ from pydantic import Field, field_validator, model_validator
 
 from .schemas import ArtifactModel, JsonModel, QualityEvidence
 
-
 Disposition = Literal["included", "excluded", "failed", "indeterminate"]
 ReviewLabel = Literal["progression", "no_progression", "indeterminate"]
 EvaluationScope = Literal["development", "external_test"]
@@ -83,7 +82,7 @@ class ResearchCase(JsonModel):
     labs_file: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def unique_studies_and_temporal_order(self) -> "ResearchCase":
+    def unique_studies_and_temporal_order(self) -> ResearchCase:
         studies = [self.baseline, *self.followups]
         ids = [study.study_id for study in studies]
         if len(ids) != len(set(ids)):
@@ -105,7 +104,7 @@ class ResearchCohortManifest(ArtifactModel):
     cases: list[ResearchCase] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def unique_patients(self) -> "ResearchCohortManifest":
+    def unique_patients(self) -> ResearchCohortManifest:
         patient_ids = [case.patient_id for case in self.cases]
         duplicates = sorted(
             patient_id for patient_id, count in Counter(patient_ids).items() if count > 1
@@ -133,7 +132,7 @@ class CohortValidationReport(ArtifactModel):
     cases: list[CaseDisposition]
 
     @model_validator(mode="after")
-    def counts_cover_all_cases(self) -> "CohortValidationReport":
+    def counts_cover_all_cases(self) -> CohortValidationReport:
         if sum(self.counts.values()) != len(self.cases):
             raise ValueError("Disposition counts must cover every manifest case")
         return self
@@ -179,7 +178,7 @@ class ResearchRunManifest(ArtifactModel):
     counts: dict[str, int]
 
     @model_validator(mode="after")
-    def run_counts_cover_all_cases(self) -> "ResearchRunManifest":
+    def run_counts_cover_all_cases(self) -> ResearchRunManifest:
         if sum(self.counts.values()) != len(self.cases):
             raise ValueError("Run disposition counts must cover every manifest case")
         return self
@@ -200,7 +199,7 @@ class AdjudicationRecord(JsonModel):
     final_label: ReviewLabel
 
     @model_validator(mode="after")
-    def final_label_matches_review_process(self) -> "AdjudicationRecord":
+    def final_label_matches_review_process(self) -> AdjudicationRecord:
         reviewer_ids = [review.reviewer_id_hash for review in self.reviewers]
         if len(set(reviewer_ids)) != 2:
             raise ValueError("Two distinct blinded reviewers are required")
@@ -227,7 +226,7 @@ class AdjudicationSet(ArtifactModel):
     records: list[AdjudicationRecord]
 
     @model_validator(mode="after")
-    def unique_patient_studies(self) -> "AdjudicationSet":
+    def unique_patient_studies(self) -> AdjudicationSet:
         keys = [(record.patient_id, record.study_id) for record in self.records]
         duplicates = sorted(key for key, count in Counter(keys).items() if count > 1)
         if duplicates:

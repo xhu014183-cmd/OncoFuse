@@ -1,9 +1,9 @@
 """HCC multimodal evidence demo."""
 
-from .contracts import build_lab_feature_vector, build_multimodal_case_evidence
-from .case_summary import summarize_case
 from .case_llm import render_with_optional_llm, validate_case_rewrite
+from .case_summary import summarize_case
 from .clinical_labs import parse_laboratory_report
+from .contracts import build_lab_feature_vector, build_multimodal_case_evidence
 from .fusion import fuse_evidence
 from .hpi import parse_hpi_timeline
 from .imaging import compare_imaging, measure_nifti
@@ -20,10 +20,10 @@ __all__ = [
     "fuse_evidence",
     "load_lab_evidence",
     "measure_nifti",
-    "render_with_optional_llm",
     "parse_hpi_timeline",
     "parse_imaging_study",
     "parse_laboratory_report",
+    "render_with_optional_llm",
     "summarize_case",
     "validate_case_rewrite",
 ]

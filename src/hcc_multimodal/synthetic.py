@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 import nibabel as nib
 import numpy as np
@@ -47,7 +47,7 @@ def generate_synthetic_case(output_dir: str | Path) -> dict[str, Path]:
     lab_payload = {
         "schema_version": SCHEMA_VERSION,
         "pipeline_version": PIPELINE_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "sources": [{"source_id": "synthetic-generator-v1", "source_type": "synthetic"}],
         "patient_id": "DEMO_HCC_001",
         "data_relationship": "Synthetic imaging and laboratory values belong to one generated case",

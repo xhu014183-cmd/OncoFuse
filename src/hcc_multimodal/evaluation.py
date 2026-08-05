@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Literal
-import json
 
 import numpy as np
 from pydantic import Field, model_validator
@@ -41,7 +41,7 @@ class CohortRecord(JsonModel):
     missing_reasons: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def temporal_order(self) -> "CohortRecord":
+    def temporal_order(self) -> CohortRecord:
         if date.fromisoformat(self.baseline_date) >= date.fromisoformat(self.followup_date):
             raise ValueError("followup_date must occur after baseline_date")
         return self
@@ -55,7 +55,7 @@ class EvaluationCohort(ArtifactModel):
     records: list[CohortRecord]
 
     @model_validator(mode="after")
-    def patient_split_isolation(self) -> "EvaluationCohort":
+    def patient_split_isolation(self) -> EvaluationCohort:
         splits: dict[str, set[str]] = defaultdict(set)
         for record in self.records:
             splits[record.patient_id].add(record.split)
@@ -244,7 +244,7 @@ def evaluate_cohort(
     return {
         "schema_version": cohort.schema_version,
         "pipeline_version": cohort.pipeline_version,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "sources": [
             SourceReference(
                 source_id=cohort.cohort_id,

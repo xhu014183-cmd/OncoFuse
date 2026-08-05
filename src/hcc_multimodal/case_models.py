@@ -12,7 +12,6 @@ from .schemas import (
     QualityStatus,
 )
 
-
 ClinicalParseStatus = Literal[
     "exact",
     "censored",
@@ -63,7 +62,7 @@ class SourceSpan(JsonModel):
     end: int = Field(gt=0)
 
     @model_validator(mode="after")
-    def ordered(self) -> "SourceSpan":
+    def ordered(self) -> SourceSpan:
         if self.end <= self.start:
             raise ValueError("source span end must be greater than start")
         return self
@@ -136,7 +135,7 @@ class ImagingInterpretationEvidence(ArtifactModel):
     provenance: dict[str, Any]
 
     @model_validator(mode="after")
-    def mode_matches_evidence(self) -> "ImagingInterpretationEvidence":
+    def mode_matches_evidence(self) -> ImagingInterpretationEvidence:
         has_quantitative = bool(self.quantitative_measurements)
         has_qualitative = bool(self.qualitative_observations)
         expected = (
@@ -170,7 +169,7 @@ class ClinicalLabObservation(JsonModel):
     above_reference: bool | None = None
 
     @model_validator(mode="after")
-    def parsed_value_consistent(self) -> "ClinicalLabObservation":
+    def parsed_value_consistent(self) -> ClinicalLabObservation:
         if self.parse_status in {"exact", "censored"} and self.value is None:
             raise ValueError("usable observations require a numeric value")
         if self.parse_status not in {"exact", "censored"} and self.value is not None:

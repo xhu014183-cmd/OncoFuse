@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import date
 import math
+from datetime import date
 
 from .schemas import (
     EvidenceMetadata,
@@ -15,7 +15,6 @@ from .schemas import (
     QualityStatus,
     SourceReference,
 )
-
 
 DATA_ORIGINS = ("real_clinical", "real_public", "synthetic", "user_supplied", "unknown")
 PAIRING_STATUSES = ("same_subject", "unpaired_poc_composite", "user_supplied_unverified")
@@ -59,7 +58,7 @@ def _append_feature(
     values: list[float],
     availability: list[bool],
     name: str,
-    value: float | int | None,
+    value: float | None,
 ) -> None:
     names.append(name)
     numeric = float(value) if value is not None else None

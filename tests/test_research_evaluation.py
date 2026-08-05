@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 import json
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -27,8 +27,7 @@ from hcc_multimodal.research_models import (
     StudyReference,
 )
 
-
-REVIEW_TIME = datetime(2026, 8, 1, tzinfo=timezone.utc)
+REVIEW_TIME = datetime(2026, 8, 1, tzinfo=UTC)
 
 
 def _review(reviewer: str, label: ReviewLabel) -> AdjudicationReview:
