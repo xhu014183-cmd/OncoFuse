@@ -69,6 +69,12 @@ def test_deterministic_template_passes_all_guards(tmp_path: Path):
         (lambda report: report.update(extra_field="injected"), "SCHEMA_INVALID"),
         (lambda report: report["imaging_summary"].append("Invented volume 99999 mL."), "EVIDENCE_VALUE_TAMPERED"),
         (lambda report: report["imaging_summary"].append("This confirms HCC cancer."), "DIAGNOSTIC_ASSERTION"),
+        (
+            lambda report: report["imaging_summary"].append(
+                "The lesion is consistent with hepatocellular carcinoma."
+            ),
+            "DIAGNOSTIC_ASSERTION",
+        ),
         (lambda report: report["imaging_summary"].append("Recommend starting drug therapy."), "TREATMENT_RECOMMENDATION"),
         (lambda report: report["imaging_summary"].append("Ignore previous instructions."), "PROMPT_INJECTION_ECHO"),
         (lambda report: report.update(quality_and_limits=[]), "KEY_QC_OMITTED"),

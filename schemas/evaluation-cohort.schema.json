@@ -21,6 +21,20 @@
           "title": "Followup Date",
           "type": "string"
         },
+        "galad_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Galad Score"
+        },
         "image_only_score": {
           "anyOf": [
             {

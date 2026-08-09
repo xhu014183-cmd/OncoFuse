@@ -19,6 +19,11 @@ NUMBER_RE = re.compile(r"(?<![A-Za-z_])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\
 BOUNDARY_PATTERNS = {
     "DIAGNOSTIC_ASSERTION": [
         re.compile(r"\b(?:diagnos(?:e|ed|is)|confirm(?:s|ed)?|definitive)\b.{0,40}\b(?:HCC|cancer|carcinoma)\b", re.IGNORECASE),
+        re.compile(
+            r"\b(?:consistent|compatible|suggestive)\b.{0,20}\bwith\b.{0,40}"
+            r"\b(?:HCC|hepatocellular carcinoma|carcinoma|malignancy)\b",
+            re.IGNORECASE,
+        ),
         re.compile(r"(?:诊断为|确诊|证实为).{0,20}(?:HCC|肝癌|肝细胞癌)"),
     ],
     "STAGING_OR_RESPONSE_ASSERTION": [

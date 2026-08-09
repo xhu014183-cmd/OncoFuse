@@ -4,7 +4,7 @@ import argparse
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from .case_llm import render_with_optional_llm
 from .case_models import (
@@ -15,6 +15,7 @@ from .case_models import (
 )
 from .case_summary import summarize_case
 from .clinical_labs import parse_laboratory_report
+from .cohort_comparison import run_cohort_comparison
 from .contracts import DATA_ORIGINS, PAIRING_STATUSES, build_multimodal_case_evidence
 from .deepseek import run_deepseek_audit
 from .evaluation import EvaluationCohort, evaluate_cohort_file
@@ -25,6 +26,7 @@ from .imaging_adapter import parse_imaging_study
 from .labs import load_lab_evidence
 from .preview import create_overlay_montage
 from .prompting import build_report_prompt, write_prompt_bundle
+from .public_cohort import prepare_public_cohort
 from .registration import register_volumes
 from .research_cohort import build_research_cohort, validate_research_cohort
 from .research_evaluation import evaluate_research_cohort, validate_adjudications
@@ -48,15 +50,20 @@ from .schemas import (
     LongitudinalImagingEvidence,
     MultimodalCaseEvidence,
     RegistrationEvidence,
+    VlmDemoReport,
     json_schema_for,
 )
 from .synthetic import generate_synthetic_case
 from .tcia import (
     LAB_SCENARIOS,
     convert_ct_and_mass_seg,
+    enumerate_hcc_tace_seg_candidates,
     prepare_hcc003,
+    prepare_public_case,
     write_composite_labs,
 )
+from .vlm_llm import imaging_metadata_text, run_vlm_dual_arm_demo
+from .vlm_prompting import VlmTaskPrompt, build_vlm_task_prompt, write_vlm_prompt_bundle
 from .vlm_skeleton import run_skeleton_demo
 from .volume_encoders import available_volume_encoders, encode_nifti_volume
 
@@ -81,6 +88,8 @@ def _schema_models() -> dict[str, type[JsonModel]]:
         "clinical-lab-evidence": ClinicalLabEvidence,
         "hpi-timeline-evidence": HpiTimelineEvidence,
         "case-research-summary": CaseResearchSummary,
+        "vlm-task-prompt": VlmTaskPrompt,
+        "vlm-demo-report": VlmDemoReport,
     }
 
 
@@ -656,6 +665,71 @@ def main() -> None:
         action="store_true",
         help="Explicitly authorize one external-test label access in this output directory",
     )
+    list_candidates = subparsers.add_parser(
+        "list-public-candidates",
+        help=(
+            "Enumerate HCC-TACE-Seg patients with CT+SEG series from the IDC index "
+            "(metadata only, no downloads)"
+        ),
+    )
+    list_candidates.add_argument("--output", required=True)
+    prepare_case = subparsers.add_parser(
+        "prepare-public-case",
+        help=(
+            "Download one HCC-TACE-Seg patient's CT+SEG series and convert to "
+            "aligned NIfTI (CT series auto-discovered from the SEG when omitted)"
+        ),
+    )
+    prepare_case.add_argument("--patient", required=True)
+    prepare_case.add_argument("--seg-series", required=True)
+    prepare_case.add_argument("--ct-series", default=None)
+    prepare_case.add_argument("--output", required=True)
+    prepare_batch = subparsers.add_parser(
+        "prepare-public-batch",
+        help=(
+            "Prepare multiple HCC-TACE-Seg cases (download, convert, measure, "
+            "overlay) using the candidate manifest; resumable across runs"
+        ),
+    )
+    prepare_batch.add_argument(
+        "--patients",
+        required=True,
+        help="Comma-separated HCC patient IDs, e.g. HCC_004,HCC_014",
+    )
+    prepare_batch.add_argument(
+        "--candidates",
+        required=True,
+        help="Path to docs/hcc_tace_seg_candidates.json",
+    )
+    prepare_batch.add_argument("--output", required=True)
+    run_comparison = subparsers.add_parser(
+        "run-cohort-comparison",
+        help=(
+            "Run the dual-mode VLM comparison over synthetic laboratory "
+            "scenarios for public cases; resumable across runs"
+        ),
+    )
+    run_comparison.add_argument(
+        "--cases",
+        required=True,
+        help="Comma-separated patient IDs, e.g. HCC_003,HCC_004",
+    )
+    run_comparison.add_argument(
+        "--scenarios",
+        default=None,
+        help="Comma-separated scenario IDs (default: all three)",
+    )
+    run_comparison.add_argument("--cohort-dir", default="public-data/cohort")
+    run_comparison.add_argument("--hcc003-dir", default="public-data/HCC_003")
+    run_comparison.add_argument("--max-tokens", type=int, default=1024)
+    run_comparison.add_argument("--temperature", type=float, default=0.3)
+    run_comparison.add_argument("--timeout", type=float, default=120.0)
+    run_comparison.add_argument("--no-json-object", action="store_true")
+    run_comparison.add_argument(
+        "--rerun",
+        action="store_true",
+        help="Re-run already-completed case x scenario comparisons",
+    )
     parse_imaging = subparsers.add_parser("parse-imaging", help="Validate a CT/MR DICOM series and optional SEG")
     parse_imaging.add_argument("--dicom-dir", required=True)
     parse_imaging.add_argument("--seg", default=None)
@@ -711,6 +785,102 @@ def main() -> None:
     )
     vlm_web.add_argument("--port", type=int, default=7860)
     vlm_web.add_argument("--share", action="store_true")
+    vlm_prompt = subparsers.add_parser(
+        "vlm-prompt",
+        help=(
+            "Build auditable/open VLM task prompts for one case; 'open' injects "
+            "laboratory observations as UNVERIFIED_CONTEXT"
+        ),
+    )
+    vlm_prompt.add_argument(
+        "--labs",
+        default=None,
+        help="Optional ClinicalLabEvidence JSON (analyze-case or parse-labs output)",
+    )
+    vlm_prompt.add_argument(
+        "--timeline",
+        default=None,
+        help="Optional HpiTimelineEvidence JSON (analyze-case or parse-hpi output)",
+    )
+    vlm_prompt.add_argument("--phase", default="unknown")
+    vlm_prompt.add_argument(
+        "--timepoint",
+        choices=("baseline", "followup", "single"),
+        default="single",
+    )
+    vlm_prompt.add_argument("--visual-token-count", type=int, default=32)
+    vlm_prompt.add_argument(
+        "--fusion-mode",
+        choices=("auditable", "open", "both"),
+        default="both",
+        help=(
+            "auditable withholds labs from the VLM prompt; open injects labs as "
+            "UNVERIFIED_CONTEXT; both writes both bundles"
+        ),
+    )
+    vlm_prompt.add_argument("--output", required=True)
+    vlm_live = subparsers.add_parser(
+        "vlm-live",
+        help=(
+            "Run dual-mode VLM arms against a real OpenAI-compatible LLM with "
+            "fail-closed audit and per-number citation extraction"
+        ),
+    )
+    vlm_live.add_argument(
+        "--labs",
+        required=True,
+        help="ClinicalLabEvidence JSON (analyze-case or parse-labs output)",
+    )
+    vlm_live.add_argument(
+        "--timeline",
+        default=None,
+        help="Optional HpiTimelineEvidence JSON (analyze-case or parse-hpi output)",
+    )
+    vlm_live.add_argument(
+        "--image",
+        action="append",
+        default=[],
+        help=(
+            "Real image(s) to attach as vision input (PNG/JPG/WEBP); "
+            "replaces <im_patch> placeholders"
+        ),
+    )
+    vlm_live.add_argument(
+        "--imaging-evidence",
+        default=None,
+        help=(
+            "Optional ImagingEvidence / LongitudinalImagingEvidence JSON; its "
+            "deterministic measurements are injected as prompt metadata"
+        ),
+    )
+    vlm_live.add_argument("--phase", default="unknown")
+    vlm_live.add_argument(
+        "--timepoint",
+        choices=("baseline", "followup", "single"),
+        default="single",
+    )
+    vlm_live.add_argument(
+        "--fusion-mode",
+        choices=("auditable", "open", "both"),
+        default="both",
+        help=(
+            "auditable withholds labs from the VLM prompt; open injects labs as "
+            "UNVERIFIED_CONTEXT; both runs and audits both arms"
+        ),
+    )
+    vlm_live.add_argument("--visual-token-count", type=int, default=32)
+    vlm_live.add_argument("--max-tokens", type=int, default=1500)
+    vlm_live.add_argument("--timeout", type=float, default=300.0)
+    vlm_live.add_argument("--temperature", type=float, default=0.0)
+    vlm_live.add_argument(
+        "--no-json-object",
+        action="store_true",
+        help=(
+            "Omit response_format=json_object; required for reasoning-class models "
+            "(e.g. deepseek-r1-distill) that return empty content in JSON mode"
+        ),
+    )
+    vlm_live.add_argument("--output", required=True)
     args = parser.parse_args()
 
     if args.command == "generate":
@@ -882,6 +1052,96 @@ def main() -> None:
         )
         print(f"Wrote {result_path}")
         print(result_path.read_text(encoding="utf-8"))
+    elif args.command == "list-public-candidates":
+        records = enumerate_hcc_tace_seg_candidates(require_seg=True)
+        output = Path(args.output)
+        output.mkdir(parents=True, exist_ok=True)
+        manifest_path = output / "hcc_tace_seg_candidates.json"
+        manifest_path.write_text(
+            json.dumps(records, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        md_lines = [
+            "| Patient | 时间点 | CT 系列 | SEG 系列 | 预计 CT+SEG (MB) |",
+            "|---|---|---|---|---|",
+        ]
+        for record in records:
+            md_lines.append(
+                f"| {record['patient_id']} | {len(record['timepoints'])} "
+                f"({', '.join(record['timepoints'][:3])}) | "
+                f"{record['ct_series_count']} | {record['seg_series_count']} | "
+                f"{record['estimated_ct_seg_mb']} |"
+            )
+        (output / "hcc_tace_seg_candidates.md").write_text(
+            "\n".join(md_lines) + "\n",
+            encoding="utf-8",
+        )
+        total_mb = sum(record["estimated_ct_seg_mb"] for record in records)
+        print(f"Wrote {manifest_path}")
+        print(f"Wrote {output / 'hcc_tace_seg_candidates.md'}")
+        print(
+            f"{len(records)} patients with CT+SEG; total estimated "
+            f"{total_mb:.0f} MB across all candidates"
+        )
+    elif args.command == "prepare-public-case":
+        image_path, mask_path, attribution_path = prepare_public_case(
+            args.output,
+            patient_id=args.patient,
+            seg_series_uid=args.seg_series,
+            ct_series_uid=args.ct_series,
+        )
+        print(f"Wrote {image_path}")
+        print(f"Wrote {mask_path}")
+        print(f"Wrote {attribution_path}")
+    elif args.command == "prepare-public-batch":
+        patients = [item.strip() for item in args.patients.split(",") if item.strip()]
+        manifest_path = prepare_public_cohort(
+            patients,
+            candidates_path=args.candidates,
+            output_dir=args.output,
+        )
+        print(f"Wrote {manifest_path}")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        print(
+            f"ok={manifest['ok_count']} already={manifest['already_prepared_count']} "
+            f"errors={manifest['error_count']}"
+        )
+        for item in manifest["patients"]:
+            if item.get("status") == "ok":
+                print(
+                    f"  {item['patient_id']}: ok, "
+                    f"{item['lesion_count']} lesion(s), "
+                    f"{item['total_tumor_volume_ml']} mL"
+                )
+            else:
+                print(f"  {item['patient_id']}: {item.get('status')}")
+    elif args.command == "run-cohort-comparison":
+        cases = [item.strip() for item in args.cases.split(",") if item.strip()]
+        scenarios = (
+            [item.strip() for item in args.scenarios.split(",") if item.strip()]
+            if args.scenarios
+            else None
+        )
+        summary_path = run_cohort_comparison(
+            cases,
+            scenarios=scenarios,
+            cohort_dir=args.cohort_dir,
+            hcc003_dir=args.hcc003_dir,
+            max_tokens=args.max_tokens,
+            temperature=args.temperature,
+            json_object=not args.no_json_object,
+            timeout_seconds=args.timeout,
+            rerun=args.rerun,
+        )
+        print(f"Wrote {summary_path}")
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        print(
+            f"runs={summary['run_count']} both_pass={summary['both_pass_count']} "
+            f"auditable_pass={summary['auditable_pass_count']} "
+            f"open_pass={summary['open_pass_count']} "
+            f"hallucinations={summary['total_hallucination_candidates']} "
+            f"open_citations={summary['total_open_numeric_citations']}"
+        )
     elif args.command == "parse-imaging":
         imaging_result = parse_imaging_study(args.dicom_dir, patient_id=args.patient_id, seg_path=args.seg, image_evidence_path=args.image_evidence, phase=args.phase, output_dir=Path(args.output).parent / ".imaging-work")
         imaging_result.write_json(args.output)
@@ -927,6 +1187,83 @@ def main() -> None:
         from .vlm_skeleton_web import launch_demo
 
         launch_demo(port=args.port, share=args.share)
+    elif args.command == "vlm-prompt":
+        if not 8 <= args.visual_token_count <= 64:
+            parser.error("--visual-token-count must be between 8 and 64")
+        prompt_labs = (
+            ClinicalLabEvidence.model_validate_json(
+                Path(args.labs).read_text(encoding="utf-8")
+            )
+            if args.labs
+            else None
+        )
+        prompt_timeline = (
+            HpiTimelineEvidence.model_validate_json(
+                Path(args.timeline).read_text(encoding="utf-8")
+            )
+            if args.timeline
+            else None
+        )
+        output = Path(args.output)
+        if args.fusion_mode == "both":
+            modes: tuple[Literal["auditable", "open"], ...] = ("auditable", "open")
+        else:
+            modes = (cast(Literal["auditable", "open"], args.fusion_mode),)
+        for mode in modes:
+            prompt = build_vlm_task_prompt(
+                labs=prompt_labs,
+                timeline=prompt_timeline,
+                fusion_mode=mode,
+                phase=args.phase,
+                timepoint=args.timepoint,
+                visual_token_count=args.visual_token_count,
+            )
+            json_path, text_path = write_vlm_prompt_bundle(
+                prompt,
+                json_path=output / f"vlm_prompt_{mode}.json",
+                text_path=output / f"vlm_prompt_{mode}.txt",
+            )
+            print(f"[{mode}] Wrote {json_path}")
+            print(f"[{mode}] Wrote {text_path}")
+    elif args.command == "vlm-live":
+        if not 8 <= args.visual_token_count <= 64:
+            parser.error("--visual-token-count must be between 8 and 64")
+        live_labs = ClinicalLabEvidence.model_validate_json(
+            Path(args.labs).read_text(encoding="utf-8")
+        )
+        live_timeline = (
+            HpiTimelineEvidence.model_validate_json(
+                Path(args.timeline).read_text(encoding="utf-8")
+            )
+            if args.timeline
+            else None
+        )
+        if args.fusion_mode == "both":
+            live_modes: tuple[Literal["auditable", "open"], ...] = ("auditable", "open")
+        else:
+            live_modes = (cast(Literal["auditable", "open"], args.fusion_mode),)
+        live_imaging_metadata = (
+            imaging_metadata_text(args.imaging_evidence)
+            if args.imaging_evidence
+            else None
+        )
+        comparison_path = run_vlm_dual_arm_demo(
+            labs=live_labs,
+            timeline=live_timeline,
+            phase=args.phase,
+            timepoint=args.timepoint,
+            fusion_modes=live_modes,
+            output_dir=args.output,
+            visual_token_count=args.visual_token_count,
+            max_tokens=args.max_tokens,
+            timeout_seconds=args.timeout,
+            temperature=args.temperature,
+            json_object=not args.no_json_object,
+            image_paths=args.image or None,
+            imaging_metadata=live_imaging_metadata,
+        )
+        print(f"Wrote {comparison_path}")
+        print(comparison_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

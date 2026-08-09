@@ -434,6 +434,97 @@ def prepare_hcc003(output_dir: str | Path) -> tuple[Path, Path, Path]:
     return convert_ct_and_mass_seg(ct_dir, seg_path, output / "converted")
 
 
+def _seg_referenced_series_uids(seg_path: str | Path) -> list[str]:
+    """Return the CT series UIDs a DICOM SEG references as its source series."""
+    try:
+        import pydicom
+    except ImportError as exc:
+        raise RuntimeError(
+            "Install public-data dependencies with: pip install -e '.[public-data]'"
+        ) from exc
+    seg = pydicom.dcmread(_io_path(Path(seg_path)))
+    uids: list[str] = []
+    for series_item in getattr(seg, "ReferencedSeriesSequence", []):
+        uid = getattr(series_item, "SeriesInstanceUID", None)
+        if uid:
+            uids.append(str(uid))
+    return uids
+
+
+def prepare_public_case(
+    output_dir: str | Path,
+    *,
+    patient_id: str,
+    seg_series_uid: str,
+    ct_series_uid: str | None = None,
+) -> tuple[Path, Path, Path]:
+    """Download one HCC-TACE-Seg patient's CT+SEG series and convert to NIfTI.
+
+    When ``ct_series_uid`` is omitted, the SEG is downloaded first and its
+    ``ReferencedSeriesSequence`` is used to discover the CT series it was
+    segmented from. Existing local files are reused, so re-running is a no-op
+    download. Returns ``(image_path, mask_path, attribution_path)``.
+    """
+    if os.name == "nt" and sys.flags.utf8_mode == 0:
+        raise RuntimeError(
+            "On Windows, set PYTHONUTF8=1 before running the public-data downloader"
+        )
+    try:
+        from idc_index import IDCClient
+    except ImportError as exc:
+        raise RuntimeError(
+            "Install public-data dependencies with: pip install -e '.[public-data]'"
+        ) from exc
+
+    output = Path(output_dir)
+    raw = output / "raw"
+    study = raw / patient_id
+    if ct_series_uid is None:
+        seg_only = study / f"SEG_{seg_series_uid}"
+        if not seg_only.exists():
+            client = IDCClient()
+            client.download_dicom_series(
+                [seg_series_uid],
+                str(raw),
+                quiet=True,
+                show_progress_bar=True,
+                dirTemplate="%PatientID/%Modality_%SeriesInstanceUID",
+            )
+        if not seg_only.exists():
+            raise FileNotFoundError(
+                f"IDC download completed without SEG series {seg_series_uid}"
+            )
+        referenced = _seg_referenced_series_uids(_single_dicom(seg_only))
+        if not referenced:
+            raise ValueError(
+                f"SEG {seg_series_uid} has no ReferencedSeriesSequence; "
+                "pass --ct-series explicitly"
+            )
+        ct_series_uid = referenced[0]
+        print(
+            f"SEG {seg_series_uid} references CT series {ct_series_uid[:30]}... "
+            f"({len(referenced)} referenced)"
+        )
+
+    ct_dir = study / f"CT_{ct_series_uid}"
+    seg_dir = study / f"SEG_{seg_series_uid}"
+    missing = [path for path in (ct_dir, seg_dir) if not path.exists()]
+    if missing:
+        client = IDCClient()
+        client.download_dicom_series(
+            [ct_series_uid, seg_series_uid],
+            str(raw),
+            quiet=True,
+            show_progress_bar=True,
+            dirTemplate="%PatientID/%Modality_%SeriesInstanceUID",
+        )
+    if not ct_dir.exists() or not seg_dir.exists():
+        raise FileNotFoundError(
+            f"IDC download completed without the expected series for {patient_id}"
+        )
+    return convert_ct_and_mass_seg(ct_dir, _single_dicom(seg_dir), output / "converted")
+
+
 LAB_SCENARIOS = {
     "dual_marker_rising": {
         "description": "AFP and DCP both rise from normal to above the supplied upper reference",
@@ -509,3 +600,93 @@ def write_composite_labs(
         encoding="utf-8",
     )
     return target
+
+
+def enumerate_hcc_tace_seg_candidates(
+    *,
+    require_seg: bool = True,
+) -> list[dict[str, Any]]:
+    """Enumerate HCC-TACE-Seg patients with CT and SEG series from the IDC index.
+
+    Metadata-only screening: no imaging is downloaded. Each record lists the
+    patient's studies (timepoints), CT/SEG series, and an estimated download
+    size, so a small development cohort can be selected before any transfer.
+    """
+    try:
+        from idc_index import IDCClient
+    except ImportError as exc:
+        raise RuntimeError(
+            "Install public-data dependencies with: pip install -e '.[public-data]'"
+        ) from exc
+
+    client = IDCClient()
+    patients = client.get_patients(COLLECTION_ID)
+    records: list[dict[str, Any]] = []
+    for patient in patients:
+        patient_id = patient["PatientID"]
+        try:
+            studies = client.get_dicom_studies(patient_id)
+        except (KeyError, TypeError, ValueError, AttributeError, IndexError) as exc:
+            records.append({"patient_id": patient_id, "error": str(exc)})
+            continue
+        study_records: list[dict[str, Any]] = []
+        total_mb = 0.0
+        ct_series_count = 0
+        seg_series_count = 0
+        timepoints: list[str] = []
+        for study in studies:
+            try:
+                series = client.get_dicom_series(study["StudyInstanceUID"])
+            except (KeyError, TypeError, ValueError, AttributeError, IndexError) as exc:
+                study_records.append(
+                    {"study_uid": study["StudyInstanceUID"], "error": str(exc)}
+                )
+                continue
+            ct = [item for item in series if item.get("Modality") == "CT"]
+            seg = [item for item in series if item.get("Modality") == "SEG"]
+            ct_series_count += len(ct)
+            seg_series_count += len(seg)
+            study_mb = sum(
+                float(item.get("series_size_MB") or 0.0) for item in ct + seg
+            )
+            total_mb += study_mb
+            if study.get("StudyDate"):
+                timepoints.append(str(study["StudyDate"]))
+            study_records.append(
+                {
+                    "study_uid": study["StudyInstanceUID"],
+                    "study_date": study.get("StudyDate"),
+                    "description": study.get("StudyDescription"),
+                    "ct_series": [
+                        {
+                            "series_uid": item["SeriesInstanceUID"],
+                            "description": item.get("SeriesDescription"),
+                            "instances": item.get("ImageCount")
+                            or item.get("instance_count"),
+                            "size_mb": item.get("series_size_MB"),
+                        }
+                        for item in ct
+                    ],
+                    "seg_series": [item["SeriesInstanceUID"] for item in seg],
+                    "estimated_mb": round(study_mb, 1),
+                }
+            )
+        records.append(
+            {
+                "patient_id": patient_id,
+                "study_count": len(studies),
+                "timepoints": timepoints,
+                "ct_series_count": ct_series_count,
+                "seg_series_count": seg_series_count,
+                "estimated_ct_seg_mb": round(total_mb, 1),
+                "studies": study_records,
+            }
+        )
+    if require_seg:
+        records = [
+            record
+            for record in records
+            if "error" not in record and record.get("seg_series_count", 0) > 0
+        ]
+    records.sort(key=lambda record: record["patient_id"])
+    return records

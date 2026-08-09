@@ -48,6 +48,8 @@ python -m venv .venv
 | 队列评估（bootstrap 区间） | `hcc-demo evaluate-cohort` | ✅ 研究用 |
 | 锁定多中心验证工作流 | `hcc-demo validate-research-cohort` … | ✅ 研究用 |
 | CPU patch 提取浏览器演示 | `hcc-demo vlm-skeleton-web` | ⚠️ **mock**，无模型 |
+| VLM 任务 prompt（可审计 / 放开） | `hcc-demo vlm-prompt` | ✅ 双模式 |
+| 双模式 VLM 真实 LLM 演示（fail-closed 审计） | `hcc-demo vlm-live` | ✅ fail-closed |
 | 真实 3D VLM 推理（M3D-LaMed） | — | 🗺️ Roadmap，见下 |
 
 ## Roadmap
@@ -62,6 +64,50 @@ python -m venv .venv
 
 仓库中的 connector/训练模块（`vlm_model`、`vlm_training`、`multimodal_connector`、
 `visual_tokens`）属于**实验性代码**，不在可信演示路径上。
+
+## 双模式 VLM prompt
+
+未来 VLM 入口（`vlm_prompting.build_vlm_task_prompt`）支持两种融合模式：
+
+- **可审计（默认）**：prompt 只含影像 token 与影像元数据。检验与 HPI 上下文按设计
+  隔离；趋势由 `labs.py` 确定性计算，在规则引擎层融合。prompt 元数据记录被隔离的
+  内容（`labs_present_but_withheld`）。
+- **放开**：检验观测以 `[UNVERIFIED_CONTEXT]` + `[LAB_###]` 形式注入，携带日期、
+  数值、单位、参考状态、趋势与来源引用；prompt 强制逐字照抄并引用证据 ID，禁止
+  重算、取整或外推。该链路仅用于并排演示数字幻觉 / 先验偏倚，不进入可信路径。
+
+```powershell
+hcc-demo parse-labs --input examples\lab_report.synthetic.txt --patient-id DEMO --output labs.json
+hcc-demo vlm-prompt --labs labs.json --fusion-mode both --phase portal_venous --timepoint followup --output prompt-out
+```
+
+输出 `vlm_prompt_auditable.{json,txt}` 与 `vlm_prompt_open.{json,txt}`。
+浏览器演示（[`docs/demo/index.html`](docs/demo/index.html)）将两种输出并排展示、
+高亮差异，并在放开链路标注「不可审计」。
+
+### 真实 LLM 对照（`vlm-live`）
+
+`hcc-demo vlm-live` 将双臂 prompt 发往配置的 OpenAI 兼容端点
+（`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME`），按 `VlmDemoReport`
+校验输出，为每个数字附加可追溯的 `numeric_citations`（解析自注入的
+`[LAB_###]` 项），任何无法追溯到所给上下文的数字都会阻断报告：
+
+```powershell
+hcc-demo vlm-live --labs labs.json --fusion-mode both --output live-out --temperature 0.3 --no-json-object
+```
+
+注意：
+
+- 加 `--image <png>` 附加真实视觉输入（GLM-4V 等）；加 `--imaging-evidence <json>`
+  把确定性影像测量（体积、病灶数）注入 prompt。
+- 推理类模型（如 `deepseek-r1-distill-qwen-32b`）在 `response_format=json_object`
+  下可能返回空正文；此时加 `--no-json-object --temperature 0.3`。受控提取优先使用
+  非推理模型，见 [docs/VLM_WEB_DEMO_PLAN.md](docs/VLM_WEB_DEMO_PLAN.md)。
+- 产物：`vlm_prompt_{mode}.json`、`vlm_arm_{mode}.json`（原始响应 + 审计）、
+  `dual_arm_comparison.json`（语句差异、数字引用、幻觉候选），以及
+  `web_demo.json`——自包含载荷，`docs/demo/index.html` 可直接载入（"载入真实结果"）
+  替换静态 mock 面板为真实双臂输出。
+- LLM 缺失/异常/被拦截时绝不产出报告：确定性模板渲染所给上下文，且必须通过同一校验器。
 
 ## 三条证据线
 

@@ -88,6 +88,8 @@ Run the checks:
 | Cohort evaluation with bootstrap intervals | `hcc-demo evaluate-cohort` | ✅ research |
 | Locked multicenter validation workflow | `hcc-demo validate-research-cohort` … | ✅ research |
 | CPU patch-extraction browser demo | `hcc-demo vlm-skeleton-web` | ⚠️ **mock**, no model |
+| VLM task prompts (auditable / open) | `hcc-demo vlm-prompt` | ✅ dual-mode |
+| Dual-mode VLM live demo (real LLM + fail-closed audit) | `hcc-demo vlm-live` | ✅ fail-closed |
 | Real 3D VLM inference (M3D-LaMed) | — | 🗺️ roadmap, see below |
 
 ## Architecture
@@ -107,6 +109,62 @@ ImagingEvidence + LabEvidence (+ HPI)
 
 Full contract: [MULTIMODAL_ARCHITECTURE.md](MULTIMODAL_ARCHITECTURE.md) ·
 three-line pipeline: [docs/THREE_LINE_PIPELINE.md](docs/THREE_LINE_PIPELINE.md)
+
+## Dual-mode VLM prompting
+
+The future VLM entry point (`vlm_prompting.build_vlm_task_prompt`) supports two
+fusion modes:
+
+- **auditable** (default): the prompt contains image tokens + imaging metadata
+  only. Laboratory and HPI context are withheld by design; trends are computed
+  deterministically (`labs.py`) and fused at the rules layer. Prompt metadata
+  records exactly what was withheld (`labs_present_but_withheld`).
+- **open**: laboratory observations are injected as `[UNVERIFIED_CONTEXT]`
+  `[LAB_###]` items with date, value, unit, reference status, trajectory, and a
+  source reference; the prompt requires verbatim, cited copying and forbids
+  re-derivation or extrapolation. This arm exists for side-by-side
+  demonstration of hallucination / prior bias, not for the trusted path.
+
+```powershell
+hcc-demo parse-labs --input examples\lab_report.synthetic.txt --patient-id DEMO --output labs.json
+hcc-demo vlm-prompt --labs labs.json --fusion-mode both --phase portal_venous --timepoint followup --output prompt-out
+```
+
+This writes `vlm_prompt_auditable.{json,txt}` and
+`vlm_prompt_open.{json,txt}`. The browser demo
+([`docs/demo/index.html`](docs/demo/index.html)) shows both outputs side by
+side with difference highlighting and an explicit "不可审计" tag on the open
+arm.
+
+### Real LLM comparison (`vlm-live`)
+
+`hcc-demo vlm-live` sends both arm prompts to the configured OpenAI-compatible
+endpoint (`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME`), validates each
+response against `VlmDemoReport`, attaches per-number `numeric_citations`
+resolved from the injected `[LAB_###]` items, and blocks any report whose
+numbers do not trace back to the supplied context:
+
+```powershell
+hcc-demo vlm-live --labs labs.json --fusion-mode both --output live-out --temperature 0.3 --no-json-object
+```
+
+Notes:
+
+- Pass `--image <png>` to attach real vision input (GLM-4V etc.); pass
+  `--imaging-evidence <json>` to inject deterministic imaging measurements
+  (volumes, lesion counts) into the prompt.
+- Reasoning-class models (e.g. `deepseek-r1-distill-qwen-32b`) can return
+  empty content with `response_format=json_object`; pass `--no-json-object
+  --temperature 0.3` for them. Non-reasoning extraction models are preferred
+  per [docs/VLM_WEB_DEMO_PLAN.md](docs/VLM_WEB_DEMO_PLAN.md).
+- Outputs: `vlm_prompt_{mode}.json`, `vlm_arm_{mode}.json` (raw response +
+  audit), `dual_arm_comparison.json` (statement diff, numeric citations,
+  hallucination candidates), and `web_demo.json` — a self-contained payload
+  that `docs/demo/index.html` can load directly ("载入真实结果") to replace
+  its static mock panes with the real dual-arm output.
+- A missing, malformed, or blocked LLM call never produces a report: the
+  deterministic template renders the supplied context and must pass the same
+  validator.
 
 ## Safety invariants
 

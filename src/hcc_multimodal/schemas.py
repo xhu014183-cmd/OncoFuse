@@ -325,6 +325,44 @@ class ControlledReport(JsonModel):
     ]
 
 
+class VlmNumericCitation(JsonModel):
+    """Deterministic per-number attribution attached at the extraction layer.
+
+    The VLM writes evidence IDs (``[LAB_001]``) into its free text; the audit
+    pipeline resolves every numeric token back to a supplied laboratory
+    observation and records the anchor here. This is the extraction-layer
+    source reference that makes diff highlighting attributable.
+    """
+
+    evidence_id: str
+    observed_at: str | None = None
+    analyte: str
+    value: float
+    comparator: Comparator = "eq"
+    unit: str
+    used_in: str
+
+
+class VlmDemoReport(JsonModel):
+    """Structured extraction target shared by both dual-mode VLM arms.
+
+    ``numeric_citations`` is populated by the deterministic audit after model
+    validation; the model itself only fills the free-text fields.
+    """
+
+    fusion_mode: Literal["auditable", "open"]
+    imaging_observations: list[str]
+    clinical_context_summary: list[str]
+    evidence_concordance: str
+    uncertainties: list[str]
+    missing_information: list[str]
+    image_conditioning_statement: str
+    research_disclaimer: Literal[
+        "Research evidence summary only; not for diagnosis, staging, prognosis, or treatment decisions."
+    ]
+    numeric_citations: list[VlmNumericCitation] = Field(default_factory=list)
+
+
 class ImageEmbeddingEvidence(ArtifactModel):
     """Manifest for a separately stored image representation artifact."""
 

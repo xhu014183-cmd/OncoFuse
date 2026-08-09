@@ -231,6 +231,19 @@
   .tech-details summary {
     cursor: pointer; font-size: 12.5px; color: var(--accent); user-select: none;
   }
+
+  /* ===== Dual-mode comparison ===== */
+  .badge.green { color: var(--ok); border-color: rgba(63,185,80,.45); }
+  .mode-note { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+  .mode-note code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; }
+  .dual-head { margin-top: 22px; margin-bottom: 12px; }
+  .dual-head h2 { font-size: 15px; margin: 0 0 4px; }
+  .dual-head .sub { font-size: 12px; color: var(--muted); }
+  .diff-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+  .diff-open { background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.45); border-radius: 6px; padding: 2px 6px; color: #ffa198; }
+  .diff-audit { background: rgba(63,185,80,.10); border: 1px solid rgba(63,185,80,.4); border-radius: 6px; padding: 2px 6px; color: #7ee787; }
+  ul.ev li.diff-open { margin-left: -8px; }
+  ul.ev li.diff-audit { margin-left: -8px; }
 </style>
 </head>
 <body>
@@ -244,6 +257,7 @@
     <div class="badges">
       <span class="badge blue">患者 DEMO_HCC_001</span>
       <span class="badge blue">CT · 肝脏</span>
+      <span class="badge amber">双模式 · 对照实验</span>
       <span class="badge amber">schema v0.1.0</span>
       <span class="badge red">研究演示 · 非诊断用途</span>
     </div>
@@ -518,6 +532,51 @@
     </section>
   </div>
 
+  <!-- ============ 双模式对照：可审计主链路 vs 完全放开对照链路 ============ -->
+  <div class="dual-head">
+    <h2>双模式对照 · 同病例双输出</h2>
+    <div class="sub">同一影像与检验输入，两种融合模式并排；红色差异项即「不可审计」风险的可视化论证。
+      本页静态对比为模拟演示，真实输出用 <code>hcc-demo vlm-live</code> 生成（同款 LLM、同一
+      VlmDemoReport schema、fail-closed 审计与逐数字引用）。</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+      <label class="badge amber" style="cursor:pointer;user-select:none">
+        载入真实结果（web_demo.json）
+        <input type="file" id="real-input" accept=".json,application/json" style="display:none">
+      </label>
+      <span id="real-status" class="badge blue">当前视图：静态模拟演示</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <section class="card">
+      <h2><span class="dot" style="background:var(--ok)"></span>主链路 · 可审计<span class="badge green" style="margin-left:auto">可审计</span></h2>
+      <div class="body">
+        <p class="mode-note">
+          <b>VLM Pass 1 只看影像</b>；检验趋势由 <code>labs.py</code> 确定性计算，
+          融合发生在受控提取 + 规则引擎层——检验数值<b>从未进入 VLM 上下文</b>，
+          「模型判读未被检验值带偏」可被证明。
+        </p>
+        <ul class="ev" id="audit-report"></ul>
+      </div>
+    </section>
+    <section class="card">
+      <h2><span class="dot" style="background:var(--up)"></span>对照链路 · 完全放开<span class="badge red" style="margin-left:auto">不可审计</span></h2>
+      <div class="body">
+        <p class="mode-note">
+          影像 + <code>[LAB]</code> 文本化检验<b>全量进 VLM 单次推理</b>，同一 output schema 提取；
+          数字幻觉与先验偏倚无法与影像证据分离。静态默认视图中的红色条目为<b>模拟输出</b>，
+          载入 <code>web_demo.json</code> 后即替换为模型真实输出。
+        </p>
+        <ul class="ev" id="open-report"></ul>
+        <div class="diff-legend">
+          <span><span class="diff-open">红</span> = 对照链路独有表述</span>
+          <span><span class="diff-audit">绿</span> = 仅主链路提供的确定性结论</span>
+          <span id="citation-status"></span>
+        </div>
+      </div>
+    </section>
+  </div>
+
   <footer>
     ⚠️ <b>预期用途声明</b>：本页面仅为研究演示（research demonstration only），所有患者数据均为合成数据；
     不构成诊断、分期或治疗决策依据。任何临床使用必须经过具备资质的医师复核。
@@ -567,6 +626,121 @@ function typeLine() {
   }, 10);
 }
 typeLine();
+</script>
+
+<script>
+// Dual-mode comparison: same case, two fusion modes, difference highlighting.
+const auditReport = [
+  "Imaging: 病灶数 1 → 2（new_lesion_signal）",
+  "Imaging: 总分割肿瘤体积 0.692 → 1.632 mL（+135.8%）",
+  "Imaging: 配对病灶 L1 体积 +109.0%（质心距离 <15 mm）",
+  "Imaging: 未输出增强方式 / LI-RADS / 病理 —— 视觉 token 不支持",
+  "Labs（确定性，不进 VLM prompt）: AFP 6.0 → 18.0 → 85.3 ng/mL，rising，>ULN 7.0",
+  "Labs（确定性）: DCP 25.0 → 68.0 mAU/mL，rising，>ULN 40.0",
+  "Fusion: concordant_progression_signal（reason codes 见上方）",
+  "Fusion: requires_clinician_review = true",
+];
+const openReport = [
+  "Imaging: 病灶数 1 → 2（new_lesion_signal）",
+  "Imaging: 总分割肿瘤体积 0.692 → 1.632 mL（+135.8%）",
+  "Imaging: 右叶病灶怀疑动脉期富血供（视觉 token 未提供增强信息）〔模拟先验偏倚〕",
+  "Labs（注入 prompt 的 UNVERIFIED_CONTEXT）: AFP 85.3 ng/mL [LAB_001]，>ULN 7.0",
+  "Labs（注入）: DCP 68.0 mAU/mL [LAB_002]，>ULN 40.0",
+  "Labs（注入）: 预计 AFP 30 天内超过 170 ng/mL〔模拟数字幻觉〕",
+  "Integrated: 影像进展 + AFP/DCP 上升提示生物学侵袭性 HCC〔模拟过度解读〕",
+  "Fusion: concordant_progression_signal（reason codes 见上方）",
+  "Fusion: requires_clinician_review = true",
+];
+
+function normStatement(s) {
+  return s.replace(/[0-9]+(?:\.[0-9]+)?/g, "N").replace(/[〔〕\[\]]/g, " ").replace(/\s+/g, " ").trim();
+}
+const auditSet = new Set(auditReport.map(normStatement));
+const openSet = new Set(openReport.map(normStatement));
+
+function renderDualList(elId, items, side) {
+  const el = document.getElementById(elId);
+  const otherSet = side === "open" ? auditSet : openSet;
+  for (const text of items) {
+    const li = document.createElement("li");
+    li.textContent = text;
+    const onlyHere = !otherSet.has(normStatement(text));
+    if (onlyHere) li.className = side === "open" ? "diff-open" : "diff-audit";
+    el.appendChild(li);
+  }
+}
+renderDualList("audit-report", auditReport, "audit");
+renderDualList("open-report", openReport, "open");
+
+// ---- real result loader (web_demo.json from `hcc-demo vlm-live`) ----
+const realInput = document.getElementById("real-input");
+realInput.addEventListener("change", (event) => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      applyRealData(JSON.parse(reader.result));
+    } catch (err) {
+      window.alert("无法解析 web_demo.json：" + err.message);
+    }
+  };
+  reader.readAsText(file, "utf-8");
+});
+
+function realStatements(report) {
+  return [
+    ...(report.imaging_observations || []),
+    ...(report.clinical_context_summary || []),
+    ...(report.uncertainties || []),
+    ...(report.missing_information || []),
+    report.evidence_concordance,
+    report.image_conditioning_statement,
+  ].filter(Boolean).map(String);
+}
+
+function renderRealList(elId, items, cls, onlySet) {
+  const el = document.getElementById(elId);
+  el.innerHTML = "";
+  for (const text of items) {
+    const li = document.createElement("li");
+    li.textContent = text;
+    if (onlySet.has(normStatement(text))) li.className = cls;
+    el.appendChild(li);
+  }
+}
+
+function applyRealData(data) {
+  const aud = (data.arms && data.arms.auditable) || {};
+  const opn = (data.arms && data.arms.open) || {};
+  const audLines = realStatements(aud.report || {});
+  const openLines = realStatements(opn.report || {});
+  const diff = data.diff || { auditable_only: [], open_only: [] };
+  const audOnly = new Set((diff.auditable_only || []).map(normStatement));
+  const openOnly = new Set((diff.open_only || []).map(normStatement));
+  renderRealList("audit-report", audLines, "diff-audit", audOnly);
+  renderRealList("open-report", openLines, "diff-open", openOnly);
+
+  const status = document.getElementById("real-status");
+  const bothPass = aud.audit_status === "pass" && opn.audit_status === "pass";
+  status.textContent =
+    "真实结果 · audit " + (aud.audit_status || "?") + " / " + (opn.audit_status || "?") +
+    " · renderer " + (aud.renderer || "?") + " / " + (opn.renderer || "?") +
+    (data.model ? " · " + data.model : "");
+  status.className = "badge " + (bothPass ? "green" : "red");
+
+  const openCitations =
+    data.open_numeric_citation_count != null
+      ? data.open_numeric_citation_count
+      : (opn.report && opn.report.numeric_citations
+          ? opn.report.numeric_citations.length
+          : 0);
+  const citations = document.getElementById("citation-status");
+  citations.textContent =
+    "open 数字引用 " + openCitations +
+    " · audit 数字引用 " + (data.auditable_numeric_citation_count != null ? data.auditable_numeric_citation_count : 0) +
+    " · 幻觉候选 " + ((data.hallucination_candidates || []).length);
+}
 </script>
 </body>
 </html>
