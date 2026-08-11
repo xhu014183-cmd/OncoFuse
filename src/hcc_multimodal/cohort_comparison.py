@@ -117,6 +117,24 @@ def run_cohort_comparison(
         imaging_metadata = imaging_metadata_text(
             case_dir / "public_imaging_evidence.json"
         )
+        case_phase = "unknown"
+        attribution_path = case_dir / "converted" / "ATTRIBUTION.json"
+        if attribution_path.exists():
+            try:
+                attribution = json.loads(attribution_path.read_text(encoding="utf-8"))
+                case_phase = str(attribution.get("phase") or "unknown")
+            except (ValueError, TypeError, OSError):
+                case_phase = "unknown"
+        sidecar = overlay.with_name(overlay.stem + "_slices.json")
+        if sidecar.exists():
+            try:
+                overlay_slices = json.loads(
+                    sidecar.read_text(encoding="utf-8")
+                ).get("slice_indices", [])
+            except (ValueError, TypeError, OSError):
+                overlay_slices = []
+            if overlay_slices:
+                imaging_metadata += f"; overlay_slices={overlay_slices}"
         for scenario in scenario_ids:
             scenario_dir = case_dir / "scenarios" / scenario
             scenario_dir.mkdir(parents=True, exist_ok=True)
@@ -135,7 +153,7 @@ def run_cohort_comparison(
                     output_dir=live_dir,
                     image_paths=[overlay],
                     imaging_metadata=imaging_metadata,
-                    phase="unknown",
+                    phase=case_phase,
                     timepoint="single",
                     max_tokens=max_tokens,
                     temperature=temperature,

@@ -90,6 +90,7 @@ Run the checks:
 | CPU patch-extraction browser demo | `hcc-demo vlm-skeleton-web` | ⚠️ **mock**, no model |
 | VLM task prompts (auditable / open) | `hcc-demo vlm-prompt` | ✅ dual-mode |
 | Dual-mode VLM live demo (real LLM + fail-closed audit) | `hcc-demo vlm-live` | ✅ fail-closed |
+| Local visualization service (upload imaging + labs → interpretation) | `hcc-demo vlm-web` | ✅ local |
 | Real 3D VLM inference (M3D-LaMed) | — | 🗺️ roadmap, see below |
 
 ## Architecture
@@ -165,6 +166,23 @@ Notes:
 - A missing, malformed, or blocked LLM call never produces a report: the
   deterministic template renders the supplied context and must pass the same
   validator.
+
+### Local visualization service (`vlm-web`)
+
+`hcc-demo vlm-web` serves `docs/demo/index.html` with a real input path: upload
+a CT volume (`.nii.gz`) + tumor mask (`.nii.gz`) + a lab report (`.txt` /
+`ClinicalLabEvidence` JSON) and the page returns an auditable interpretation.
+The server measures the imaging deterministically, runs the auditable arm
+(image-only VLM), computes lab trends, and fail-closes on any audit error:
+
+```powershell
+hcc-demo vlm-web --port 7861
+```
+
+Open `http://127.0.0.1:7861/` in a browser. The service binds to localhost and
+keeps the LLM key in the server environment; it is a local tool, not a hosted
+GitHub Pages app. Check the "同时跑 open 对照臂" box to also render the
+dual-mode comparison from the same upload.
 
 ## Safety invariants
 

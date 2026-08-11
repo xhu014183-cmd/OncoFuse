@@ -10,6 +10,7 @@ from PIL import Image
 from hcc_multimodal.clinical_labs import parse_laboratory_report
 from hcc_multimodal.schemas import VlmDemoReport
 from hcc_multimodal.vlm_llm import (
+    _dedupe_report_fields,
     build_numeric_citations,
     build_vlm_template_report,
     call_vlm_llm,
@@ -98,6 +99,40 @@ def test_reformatted_date_is_not_false_tampering(tmp_path: Path):
     codes = {item["code"] for item in validation["errors"]}
     assert "EVIDENCE_VALUE_TAMPERED" not in codes
     assert validation["valid"] is True
+
+
+def test_iso_date_echo_in_report_is_not_false_tampering(tmp_path: Path):
+    labs_path = tmp_path / "labs.txt"
+    labs_path.write_text(
+        "1998-09-30 AFP 6 ng/mL 0-7\n1998-12-29 AFP 85.3 ng/mL 0-7\n",
+        encoding="utf-8",
+    )
+    labs = parse_laboratory_report(labs_path, patient_id="CASE")
+    prompt = build_vlm_task_prompt(labs=labs, fusion_mode="open")
+    report = build_vlm_template_report(prompt)
+    report["clinical_context_summary"] = [
+        "[LAB_001] AFP level at 85.3 ng/mL on 1998-12-29 (persistent rising)"
+    ]
+
+    validation = validate_vlm_report(report, fusion_mode="open", prompt=prompt)
+
+    codes = {item["code"] for item in validation["errors"]}
+    assert "EVIDENCE_VALUE_TAMPERED" not in codes
+    assert validation["valid"] is True
+
+
+def test_dedupe_report_fields_removes_repeats_order_preserving():
+    report = {
+        "imaging_observations": ["A finding", "a finding", "B finding", "B finding"],
+        "uncertainties": ["phase unknown", "phase unknown", "other"],
+        "missing_information": ["only once"],
+    }
+
+    _dedupe_report_fields(report)
+
+    assert report["imaging_observations"] == ["A finding", "B finding"]
+    assert report["uncertainties"] == ["phase unknown", "other"]
+    assert report["missing_information"] == ["only once"]
 
 
 def test_diagnostic_assertion_is_blocked(tmp_path: Path):

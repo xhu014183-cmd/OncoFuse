@@ -114,3 +114,18 @@ def test_imaging_metadata_injected_into_prompt():
     assert "lesion_count=2" in prompt.prompt_text
     assert "1.632" in prompt.prompt_text
     assert prompt.metadata["imaging_metadata_present"] is True
+
+
+def test_auditable_prompt_has_anti_repetition_and_visual_rules():
+    prompt = build_vlm_task_prompt(
+        fusion_mode="auditable",
+        imaging_metadata=(
+            "Imaging measurements (deterministic): lesion_count=1; "
+            "total_volume_ml=12.808"
+        ),
+    )
+
+    assert "Do not restate the deterministic imaging measurements" in prompt.prompt_text
+    assert "do not state that they are missing" in prompt.prompt_text
+    assert "Never repeat the same statement across fields" in prompt.prompt_text
+    assert "mention it once in uncertainties" in prompt.prompt_text

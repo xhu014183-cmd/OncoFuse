@@ -50,6 +50,7 @@ python -m venv .venv
 | CPU patch 提取浏览器演示 | `hcc-demo vlm-skeleton-web` | ⚠️ **mock**，无模型 |
 | VLM 任务 prompt（可审计 / 放开） | `hcc-demo vlm-prompt` | ✅ 双模式 |
 | 双模式 VLM 真实 LLM 演示（fail-closed 审计） | `hcc-demo vlm-live` | ✅ fail-closed |
+| 本地可视化服务（上传影像+检验→解读） | `hcc-demo vlm-web` | ✅ 本地 |
 | 真实 3D VLM 推理（M3D-LaMed） | — | 🗺️ Roadmap，见下 |
 
 ## Roadmap
@@ -108,6 +109,21 @@ hcc-demo vlm-live --labs labs.json --fusion-mode both --output live-out --temper
   `web_demo.json`——自包含载荷，`docs/demo/index.html` 可直接载入（"载入真实结果"）
   替换静态 mock 面板为真实双臂输出。
 - LLM 缺失/异常/被拦截时绝不产出报告：确定性模板渲染所给上下文，且必须通过同一校验器。
+
+### 本地可视化服务（`vlm-web`）
+
+`hcc-demo vlm-web` 提供真实输入入口：上传 CT 体数据（`.nii.gz`）+ 肿瘤 mask
+（`.nii.gz`）+ 检验报告（`.txt` / `ClinicalLabEvidence` JSON），页面返回可审计解读。
+服务端确定性测量影像、运行 auditable 臂（影像-only VLM）、计算检验趋势，任何审计
+失败即拦截：
+
+```powershell
+hcc-demo vlm-web --port 7861
+```
+
+浏览器打开 `http://127.0.0.1:7861/`。服务仅绑定本机、LLM key 只存在服务端环境变量；
+这是本地工具而非 GitHub Pages 托管应用。勾选「同时跑 open 对照臂」可在同一上传上
+渲染双模式对比。
 
 ## 三条证据线
 

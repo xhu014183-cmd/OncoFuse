@@ -149,9 +149,9 @@ def build_vlm_task_prompt(
         ) if context else "No structured clinical context was supplied."
     else:
         context = (
-            "None. Laboratory and clinical-history context was withheld before "
-            "prompt construction by design (auditable fusion mode). Do not "
-            "reference any laboratory value or clinical-history event."
+            "Laboratory and clinical-history context is withheld by design "
+            "(auditable fusion mode). Do not state that it is missing; simply "
+            "describe the imaging findings."
         )
     if image_count > 0:
         visual_prefix = (
@@ -181,17 +181,27 @@ Rules:
 - State only observations supported by the 3D visual tokens or cited clinical evidence IDs.
 - Do not diagnose, stage, predict prognosis, or recommend treatment.
 - Do not invent enhancement phases, measurements, laboratory values, or events.
+- Do not restate the deterministic imaging measurements above; describe visual
+  appearance instead (location within the liver, margins, internal texture,
+  visible features). Measurements are computed deterministically, not by you.
+- Give each field a distinct purpose: imaging_observations lists new visual
+  findings; uncertainties lists unresolved points once; missing_information
+  lists genuinely absent inputs. Never repeat the same statement across fields.
+- If the phase is unknown, mention it once in uncertainties and do not repeat
+  it in other fields.
 """
     if inject:
         prompt += (
             "- Laboratory numbers are UNVERIFIED_CONTEXT: copy each value "
             "verbatim with its unit and cite the [LAB_###] evidence ID; never "
             "re-derive, round, extrapolate, or invent values.\n"
+            "- Do not state that laboratory context is missing; it is provided "
+            "below as UNVERIFIED_CONTEXT items.\n"
         )
     else:
         prompt += (
-            "- No laboratory values or clinical-history events were supplied; "
-            "do not reference any.\n"
+            "- No laboratory values or clinical-history events are visible by "
+            "design; do not reference any and do not state that they are missing.\n"
         )
     prompt += (
         "- Explicitly state how the image affected the output in image_conditioning_statement.\n"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from collections import Counter
 from datetime import UTC, datetime
@@ -408,7 +409,7 @@ def convert_ct_and_mass_seg(
         "selected_acquisition_id": selected_acquisition,
         "selected_segment_label": "Mass",
         "selected_segment_number": mass_number,
-        "phase": "unknown",
+        "phase": _infer_phase(ct_by_uid),
         "conversion": "complete selected CT acquisition plus frame-mapped DICOM SEG; LPS converted to RAS",
         "geometry_qc": {
             "status": "warning" if warnings else "pass",
@@ -449,6 +450,32 @@ def _seg_referenced_series_uids(seg_path: str | Path) -> list[str]:
         if uid:
             uids.append(str(uid))
     return uids
+
+
+PHASE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bportal\b|\bvenous\b", re.IGNORECASE), "portal_venous"),
+    (re.compile(r"\barterial\b|\bartery\b", re.IGNORECASE), "arterial"),
+    (re.compile(r"\bdelayed\b|\bequilibrium\b", re.IGNORECASE), "delayed"),
+    (
+        re.compile(r"\bnon[- ]?contrast\b|\bunenhanced\b|\bplain\b|\bpre\b", re.IGNORECASE),
+        "non_contrast",
+    ),
+]
+
+
+def _infer_phase(ct_by_uid: dict[str, Any]) -> str:
+    """Infer the contrast phase from CT DICOM series descriptions/protocols."""
+    parts: list[str] = []
+    for dataset in ct_by_uid.values():
+        for attr in ("SeriesDescription", "ProtocolName"):
+            value = getattr(dataset, attr, None)
+            if value:
+                parts.append(str(value))
+    text = " ".join(parts)
+    for pattern, label in PHASE_PATTERNS:
+        if pattern.search(text):
+            return label
+    return "unknown"
 
 
 def prepare_public_case(

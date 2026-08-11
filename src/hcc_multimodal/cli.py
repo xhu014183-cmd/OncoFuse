@@ -13,6 +13,7 @@ from .case_models import (
     HpiTimelineEvidence,
     ImagingInterpretationEvidence,
 )
+from .case_runner import run_case_vlm
 from .case_summary import summarize_case
 from .clinical_labs import parse_laboratory_report
 from .cohort_comparison import run_cohort_comparison
@@ -730,6 +731,59 @@ def main() -> None:
         action="store_true",
         help="Re-run already-completed case x scenario comparisons",
     )
+    run_case_vlm_parser = subparsers.add_parser(
+        "run-case-vlm",
+        help=(
+            "One-command end-to-end: case or NIfTI + labs/scenario -> dual-mode "
+            "VLM -> web_demo.json"
+        ),
+    )
+    run_case_vlm_parser.add_argument(
+        "--case",
+        default=None,
+        help="Prepared case ID (cohort dir or HCC_003)",
+    )
+    run_case_vlm_parser.add_argument(
+        "--scenario",
+        default=None,
+        help="Synthetic lab scenario anchored to the case study date",
+    )
+    run_case_vlm_parser.add_argument(
+        "--labs",
+        default=None,
+        help="Lab report text or ClinicalLabEvidence JSON",
+    )
+    run_case_vlm_parser.add_argument("--image", action="append", default=[])
+    run_case_vlm_parser.add_argument("--imaging-evidence", default=None)
+    run_case_vlm_parser.add_argument("--nifti-image", default=None)
+    run_case_vlm_parser.add_argument("--nifti-mask", default=None)
+    run_case_vlm_parser.add_argument("--study-date", default=None)
+    run_case_vlm_parser.add_argument("--cohort-dir", default="public-data/cohort")
+    run_case_vlm_parser.add_argument("--hcc003-dir", default="public-data/HCC_003")
+    run_case_vlm_parser.add_argument("--output", required=True)
+    run_case_vlm_parser.add_argument(
+        "--fusion-mode",
+        choices=("auditable", "open", "both"),
+        default="both",
+    )
+    run_case_vlm_parser.add_argument("--visual-token-count", type=int, default=32)
+    run_case_vlm_parser.add_argument("--max-tokens", type=int, default=1024)
+    run_case_vlm_parser.add_argument("--temperature", type=float, default=0.3)
+    run_case_vlm_parser.add_argument("--timeout", type=float, default=120.0)
+    run_case_vlm_parser.add_argument("--no-json-object", action="store_true")
+    vlm_web_cmd = subparsers.add_parser(
+        "vlm-web",
+        help=(
+            "Launch the local visualization service: upload imaging + lab report "
+            "and get an auditable interpretation"
+        ),
+    )
+    vlm_web_cmd.add_argument("--port", type=int, default=7861)
+    vlm_web_cmd.add_argument(
+        "--index",
+        default=None,
+        help="Path to index.html (default: docs/demo/index.html)",
+    )
     parse_imaging = subparsers.add_parser("parse-imaging", help="Validate a CT/MR DICOM series and optional SEG")
     parse_imaging.add_argument("--dicom-dir", required=True)
     parse_imaging.add_argument("--seg", default=None)
@@ -1142,6 +1196,51 @@ def main() -> None:
             f"hallucinations={summary['total_hallucination_candidates']} "
             f"open_citations={summary['total_open_numeric_citations']}"
         )
+    elif args.command == "run-case-vlm":
+        if not 8 <= args.visual_token_count <= 64:
+            parser.error("--visual-token-count must be between 8 and 64")
+        if args.fusion_mode == "both":
+            case_modes: tuple[Literal["auditable", "open"], ...] = ("auditable", "open")
+        else:
+            case_modes = (cast(Literal["auditable", "open"], args.fusion_mode),)
+        web_path = run_case_vlm(
+            case=args.case,
+            scenario=args.scenario,
+            labs_path=args.labs,
+            image_paths=args.image or None,
+            imaging_evidence_path=args.imaging_evidence,
+            nifti_image=args.nifti_image,
+            nifti_mask=args.nifti_mask,
+            study_date=args.study_date,
+            cohort_dir=args.cohort_dir,
+            hcc003_dir=args.hcc003_dir,
+            output_dir=args.output,
+            fusion_modes=case_modes,
+            max_tokens=args.max_tokens,
+            temperature=args.temperature,
+            json_object=not args.no_json_object,
+            timeout_seconds=args.timeout,
+        )
+        print(f"Wrote {web_path}")
+        web = json.loads(web_path.read_text(encoding="utf-8"))
+        print(
+            f"audit: "
+            f"{web['arms'].get('auditable', {}).get('audit_status')} / "
+            f"{web['arms'].get('open', {}).get('audit_status')} "
+            f"· model={web.get('model')} "
+            f"· open_citations={web.get('open_numeric_citation_count')} "
+            f"· hallucinations={len(web.get('hallucination_candidates') or [])}"
+        )
+    elif args.command == "vlm-web":
+        from .vlm_web import launch_vlm_web
+
+        project_root = Path(__file__).resolve().parent.parent.parent
+        index_path = (
+            Path(args.index)
+            if args.index
+            else project_root / "docs" / "demo" / "index.html"
+        )
+        launch_vlm_web(index_path=index_path, port=args.port)
     elif args.command == "parse-imaging":
         imaging_result = parse_imaging_study(args.dicom_dir, patient_id=args.patient_id, seg_path=args.seg, image_evidence_path=args.image_evidence, phase=args.phase, output_dir=Path(args.output).parent / ".imaging-work")
         imaging_result.write_json(args.output)

@@ -240,6 +240,28 @@ def _as_text_list(value: Any) -> list[str]:
     return [str(value)]
 
 
+def _dedupe_report_fields(report: dict[str, Any]) -> dict[str, Any]:
+    """Remove repeated narrative statements (order-preserving, per field)."""
+    for field in (
+        "imaging_observations",
+        "clinical_context_summary",
+        "uncertainties",
+        "missing_information",
+    ):
+        values = report.get(field)
+        if not isinstance(values, list):
+            continue
+        seen: set[str] = set()
+        cleaned: list[Any] = []
+        for item in values:
+            key = str(item).strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                cleaned.append(item)
+        report[field] = cleaned
+    return report
+
+
 def build_numeric_citations(
     report: dict[str, Any],
     prompt: VlmTaskPrompt,
@@ -264,7 +286,8 @@ def build_numeric_citations(
     seen: set[tuple[float, str]] = set()
     for field_index, text in enumerate(narrative_fields):
         location = f"field[{field_index}]"
-        for match in NUMBER_RE.finditer(_strip_evidence_ids(str(text))):
+        scanned = _strip_evidence_ids(_mask_iso_dates(str(text)))
+        for match in NUMBER_RE.finditer(scanned):
             number = float(match.group())
             if not math.isfinite(number):
                 continue
@@ -463,6 +486,7 @@ def _run_single_arm(
         )
     except RuntimeError as exc:
         report = build_vlm_template_report(prompt)
+        _dedupe_report_fields(report)
         validation = validate_vlm_report(report, fusion_mode=prompt.fusion_mode, prompt=prompt)
         report["numeric_citations"] = validation["numeric_citations"]
         result.update(
@@ -486,6 +510,7 @@ def _run_single_arm(
         )
     else:
         report = llm_result.pop("report")
+        _dedupe_report_fields(report)
         validation = validate_vlm_report(report, fusion_mode=prompt.fusion_mode, prompt=prompt)
         report["numeric_citations"] = validation["numeric_citations"]
         result.update(llm_result)

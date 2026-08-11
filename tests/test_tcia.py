@@ -1,8 +1,9 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from hcc_multimodal.tcia import _seg_referenced_series_uids
+from hcc_multimodal.tcia import _infer_phase, _seg_referenced_series_uids
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PUBLIC_SEG_DIR = (
@@ -28,3 +29,28 @@ def test_seg_references_its_source_ct_series():
     uids = _seg_referenced_series_uids(seg_files[0])
 
     assert EXPECTED_CT_SERIES in uids
+
+
+def test_infer_phase_portal_venous():
+    datasets = {
+        "a": SimpleNamespace(
+            SeriesDescription="LIVER PORTAL VENOUS PHASE", ProtocolName=None
+        )
+    }
+    assert _infer_phase(datasets) == "portal_venous"
+
+
+def test_infer_phase_non_contrast_from_protocol():
+    datasets = {
+        "a": SimpleNamespace(SeriesDescription=None, ProtocolName="PRE LIVER")
+    }
+    assert _infer_phase(datasets) == "non_contrast"
+
+
+def test_infer_phase_unknown_for_ambiguous_description():
+    datasets = {
+        "a": SimpleNamespace(
+            SeriesDescription="Recon 2: LIVER 3 PHASE (AP)", ProtocolName=None
+        )
+    }
+    assert _infer_phase(datasets) == "unknown"
