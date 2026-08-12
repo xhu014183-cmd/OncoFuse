@@ -11,6 +11,34 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 
+def _load_canonical_pair(
+    image_path: str | Path,
+    mask_path: str | Path,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load image+mask reoriented to closest canonical (RAS+) axes."""
+    image = cast(nib.Nifti1Image, nib.load(str(image_path)))
+    mask = cast(nib.Nifti1Image, nib.load(str(mask_path)))
+    image = nib.as_closest_canonical(image)
+    mask = nib.as_closest_canonical(mask)
+    if image.shape != mask.shape or not np.allclose(
+        image.affine, mask.affine, atol=1e-3
+    ):
+        raise ValueError("Image and mask must have matching shape and affine")
+    image_data = np.asarray(image.dataobj, dtype=np.float32)
+    mask_data = np.asarray(mask.dataobj) > 0
+    return image_data, mask_data
+
+
+def _radiological_axial(slice_xy: np.ndarray) -> np.ndarray:
+    """Convert a canonical axial slice to the radiological viewing orientation.
+
+    Canonical axial arrays have rows = x (L->R) and columns = y (P->A).
+    Radiological view (viewed from the feet): anterior wall on top, the
+    patient's right side on the image left, spine at the bottom.
+    """
+    return np.fliplr(np.rot90(slice_xy, k=1))
+
+
 def create_overlay_montage(
     image_path: str | Path,
     mask_path: str | Path,
@@ -20,12 +48,7 @@ def create_overlay_montage(
     window_high: float = 300.0,
 ) -> Path:
     """Create a three-slice CT montage with a red mask overlay."""
-    image = cast(nib.Nifti1Image, nib.load(str(image_path)))
-    mask = cast(nib.Nifti1Image, nib.load(str(mask_path)))
-    if image.shape != mask.shape or not np.allclose(image.affine, mask.affine, atol=1e-3):
-        raise ValueError("Image and mask must have matching shape and affine")
-    image_data = np.asarray(image.dataobj, dtype=np.float32)
-    mask_data = np.asarray(mask.dataobj) > 0
+    image_data, mask_data = _load_canonical_pair(image_path, mask_path)
     occupied = np.flatnonzero(mask_data.any(axis=(0, 1)))
     if occupied.size == 0:
         raise ValueError("Cannot create a tumor overlay because the mask is empty")
@@ -37,13 +60,13 @@ def create_overlay_montage(
 
     panels: list[Image.Image] = []
     for index in indices:
+        raw_slice = image_data[:, :, index]
+        mask_slice = mask_data[:, :, index]
         pixels = np.clip(
-            (image_data[:, :, index] - window_low) / (window_high - window_low),
-            0,
-            1,
+            (raw_slice - window_low) / (window_high - window_low), 0, 1
         )
-        gray = np.rot90((pixels * 255).astype(np.uint8))
-        region = np.rot90(mask_data[:, :, index])
+        gray = _radiological_axial((pixels * 255).astype(np.uint8))
+        region = _radiological_axial(mask_slice)
         rgb = np.repeat(gray[:, :, None], 3, axis=2)
         rgb[region] = (
             0.35 * rgb[region] + 0.65 * np.asarray([235, 55, 45])
@@ -86,12 +109,7 @@ def extract_axial_slice_previews(
     the CT window with the tumor mask overlaid in red. Slice indices are
     concentrated on the mask-occupied range so the viewer lands on the lesion.
     """
-    image = cast(nib.Nifti1Image, nib.load(str(image_path)))
-    mask = cast(nib.Nifti1Image, nib.load(str(mask_path)))
-    if image.shape != mask.shape or not np.allclose(image.affine, mask.affine, atol=1e-3):
-        raise ValueError("Image and mask must have matching shape and affine")
-    image_data = np.asarray(image.dataobj, dtype=np.float32)
-    mask_data = np.asarray(mask.dataobj) > 0
+    image_data, mask_data = _load_canonical_pair(image_path, mask_path)
     occupied = np.flatnonzero(mask_data.any(axis=(0, 1)))
     depth = image_data.shape[2]
     if occupied.size:
@@ -118,13 +136,13 @@ def extract_axial_slice_previews(
         indices = unique_indices
     previews: list[dict[str, object]] = []
     for index in indices:
+        raw_slice = image_data[:, :, index]
+        mask_slice = mask_data[:, :, index]
         pixels = np.clip(
-            (image_data[:, :, index] - window_low) / (window_high - window_low),
-            0,
-            1,
+            (raw_slice - window_low) / (window_high - window_low), 0, 1
         )
-        gray = np.rot90((pixels * 255).astype(np.uint8))
-        region = np.rot90(mask_data[:, :, index])
+        gray = _radiological_axial((pixels * 255).astype(np.uint8))
+        region = _radiological_axial(mask_slice)
         rgb = np.repeat(gray[:, :, None], 3, axis=2)
         rgb[region] = (
             0.35 * rgb[region] + 0.65 * np.asarray([235, 55, 45])
@@ -154,10 +172,7 @@ def extract_lesion_zoom(
     window_high: float = 300.0,
 ) -> dict[str, object]:
     """Crop and magnify the lesion on its centroid axial slice."""
-    image = cast(nib.Nifti1Image, nib.load(str(image_path)))
-    mask = cast(nib.Nifti1Image, nib.load(str(mask_path)))
-    image_data = np.asarray(image.dataobj, dtype=np.float32)
-    mask_data = np.asarray(mask.dataobj) > 0
+    image_data, mask_data = _load_canonical_pair(image_path, mask_path)
     coords = np.argwhere(mask_data)
     if coords.size == 0:
         raise ValueError("Cannot zoom into an empty tumor mask")
@@ -171,13 +186,13 @@ def extract_lesion_zoom(
     x0 = max(0, center_x - half)
     y1 = min(n_y, y0 + crop)
     x1 = min(n_x, x0 + crop)
+    raw_crop = image_data[y0:y1, x0:x1, center_z]
+    mask_crop = mask_data[y0:y1, x0:x1, center_z]
     pixels = np.clip(
-        (image_data[y0:y1, x0:x1, center_z] - window_low) / (window_high - window_low),
-        0,
-        1,
+        (raw_crop - window_low) / (window_high - window_low), 0, 1
     )
-    gray = np.rot90((pixels * 255).astype(np.uint8))
-    region = np.rot90(mask_data[y0:y1, x0:x1, center_z])
+    gray = _radiological_axial((pixels * 255).astype(np.uint8))
+    region = _radiological_axial(mask_crop)
     rgb = np.repeat(gray[:, :, None], 3, axis=2)
     rgb[region] = (
         0.35 * rgb[region] + 0.65 * np.asarray([235, 55, 45])

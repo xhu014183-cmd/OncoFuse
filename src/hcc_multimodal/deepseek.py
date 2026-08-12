@@ -19,11 +19,6 @@ NUMBER_RE = re.compile(r"(?<![A-Za-z_])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\
 BOUNDARY_PATTERNS = {
     "DIAGNOSTIC_ASSERTION": [
         re.compile(r"\b(?:diagnos(?:e|ed|is)|confirm(?:s|ed)?|definitive)\b.{0,40}\b(?:HCC|cancer|carcinoma)\b", re.IGNORECASE),
-        re.compile(
-            r"\b(?:consistent|compatible|suggestive)\b.{0,20}\bwith\b.{0,40}"
-            r"\b(?:HCC|hepatocellular carcinoma|carcinoma|malignancy)\b",
-            re.IGNORECASE,
-        ),
         re.compile(r"(?:诊断为|确诊|证实为).{0,20}(?:HCC|肝癌|肝细胞癌)"),
     ],
     "STAGING_OR_RESPONSE_ASSERTION": [
@@ -37,6 +32,16 @@ BOUNDARY_PATTERNS = {
     "PROMPT_INJECTION_ECHO": [
         re.compile(r"ignore (?:all |the )?(?:previous|prior|system) instructions", re.IGNORECASE),
         re.compile(r"忽略.{0,12}(?:之前|系统|上述).{0,8}(?:指令|提示)"),
+    ],
+}
+
+SOFT_PATTERNS = {
+    "SOFT_DIAGNOSTIC_ASSERTION": [
+        re.compile(
+            r"\b(?:consistent|compatible|suggestive)\b.{0,20}\bwith\b.{0,40}"
+            r"\b(?:HCC|hepatocellular carcinoma|carcinoma|malignancy)\b",
+            re.IGNORECASE,
+        ),
     ],
 }
 
@@ -189,6 +194,16 @@ def validate_report(
                 {"code": code, "message": f"Boundary pattern matched: {violation.pattern}"}
             )
 
+    soft_warnings: list[dict[str, str]] = []
+    for code, patterns in SOFT_PATTERNS.items():
+        for line in narrative.splitlines():
+            for pattern in patterns:
+                match = pattern.search(line)
+                if match and not _negated(line, match.start()):
+                    soft_warnings.append(
+                        {"code": code, "message": f"Soft pattern matched: {pattern.pattern}"}
+                    )
+
     if prompt_bundle is not None:
         required_quality = prompt_bundle.get("required_quality_items") or []
         actual_quality = report.get("quality_and_limits") or []
@@ -215,6 +230,7 @@ def validate_report(
         "status": "pass" if not errors else "fail",
         "valid": not errors,
         "errors": errors,
+        "soft_warnings": soft_warnings,
     }
 
 

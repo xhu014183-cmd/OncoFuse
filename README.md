@@ -173,11 +173,34 @@ Notes:
 a CT volume (`.nii.gz`) + tumor mask (`.nii.gz`) + a lab report (`.txt` /
 `ClinicalLabEvidence` JSON) and the page returns an auditable interpretation.
 The server measures the imaging deterministically, runs the auditable arm
-(image-only VLM), computes lab trends, and fail-closes on any audit error:
+(image-only VLM), computes lab trends, and fail-closes on any audit error.
+The page renders a doctor-facing clinical report, not engineering jargon:
 
 ```powershell
 hcc-demo vlm-web --port 7861
 ```
+
+After upload the page shows:
+
+- **Clinical report (for clinicians, not a diagnosis)** — imaging findings,
+  laboratory findings, combined assessment, and next steps in plain clinical
+  language; rule-engine jargon and the audit trail are collapsed into a
+  "technical appendix".
+- **Scrollable axial slice viewer** (16 slices, slider + prev/next) with the
+  tumor mask overlaid, plus a lesion close-up. Slices are reoriented to
+  canonical RAS axes and rendered in the radiological orientation (anterior on
+  top, the patient's right on the image left).
+- **Lab trend chart** with ULN reference lines, per-marker change percentages,
+  and a timeline aligning the CT date with each lab date.
+- **Risk-tier badge** (high / medium / low) derived from a guideline-style
+  heuristic (lesion size × marker thresholds) — explicitly non-diagnostic.
+- **Graded audit**: definite diagnoses ("confirmed HCC") still block the
+  report; softer phrasing ("consistent with …") passes with a visible
+  "requires clinician confirmation" warning.
+- **Service health check** (`GET /api/health`) and a version badge in the page
+  header (`vlm-web 0.4.0-web · started …`) so it is obvious when the server or
+  page is stale; opening the file directly shows a "start the service" hint
+  instead of a bare fetch error.
 
 Open `http://127.0.0.1:7861/` in a browser. The service binds to localhost and
 keeps the LLM key in the server environment; it is a local tool, not a hosted

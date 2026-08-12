@@ -1031,6 +1031,11 @@ function renderInterpretation(interp) {
     '<p class="rd-scope"><b>综合评估：</b>' + escapeHtml(cr.assessment || "—") + "</p>" +
     '<p class="rd-scope"><b>建议：</b>' + escapeHtml(cr.suggestion || "—") + "</p>" +
     "</div></div>";
+  const softWarn = (interp.soft_warnings || []).length
+    ? '<div style="margin:10px 0;padding:8px 12px;border:1px solid rgba(210,153,34,.5);border-radius:8px;background:rgba(210,153,34,.08);color:#e3b341;font-size:12px">' +
+      "⚠ 模型输出含提示性诊断表述（consistent / suggestive…），未经医师确认，请复核。" +
+      "</div>"
+    : "";
   const techLines = [
     "检验趋势（确定性解析）：" + labSentence,
     "综合提示（规则引擎口径）：" + (interp.clinical_impression || "") +
@@ -1078,6 +1083,7 @@ function renderInterpretation(interp) {
         "</div></div>" +
       "</div>" +
       clinicalCard +
+      softWarn +
       (interp.clinical_history
         ? '<p class="rd-scope"><b>临床背景：</b>' + escapeHtml(interp.clinical_history) + "</p>"
         : "") +

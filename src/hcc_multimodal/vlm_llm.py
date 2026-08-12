@@ -29,6 +29,7 @@ from .case_models import ClinicalLabEvidence, HpiTimelineEvidence
 from .deepseek import (
     BOUNDARY_PATTERNS,
     NUMBER_RE,
+    SOFT_PATTERNS,
     _collect_number_tokens,
     _extract_json,
     _negated,
@@ -387,6 +388,16 @@ def validate_vlm_report(
                 {"code": code, "message": f"Boundary pattern matched: {violation.pattern}"}
             )
 
+    soft_warnings: list[dict[str, str]] = []
+    for code, patterns in SOFT_PATTERNS.items():
+        for line in narrative.splitlines():
+            for pattern in patterns:
+                match = pattern.search(line)
+                if match and not _negated(line, match.start()):
+                    soft_warnings.append(
+                        {"code": code, "message": f"Soft pattern matched: {pattern.pattern}"}
+                    )
+
     citations, unattributed = build_numeric_citations(report, prompt)
     allowed = _collect_number_tokens(_mask_iso_dates(prompt.prompt_text))
     allowed.update(_date_components(prompt.prompt_text))
@@ -412,6 +423,7 @@ def validate_vlm_report(
         "status": "pass" if not errors else "fail",
         "valid": not errors,
         "errors": errors,
+        "soft_warnings": soft_warnings,
         "numeric_citations": [citation.to_dict() for citation in citations],
         "unattributed_numbers": sorted(set(unattributed)),
     }

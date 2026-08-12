@@ -488,6 +488,9 @@ class _Handler(BaseHTTPRequestHandler):
                 ),
                 "auditable_report": auditable.get("report"),
                 "audit_status": auditable.get("audit_status"),
+                "soft_warnings": (auditable.get("validation") or {}).get(
+                    "soft_warnings", []
+                ),
                 "audit_errors": [
                     item.get("message")
                     for item in (auditable.get("validation") or {}).get("errors", [])
