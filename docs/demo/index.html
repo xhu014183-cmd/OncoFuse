@@ -296,10 +296,18 @@
         <label class="badge blue" style="cursor:pointer">检验报告 (.txt/.json)
           <input type="file" id="inp-labs" accept=".txt,.json" style="display:none">
         </label>
+        <label class="badge blue" style="cursor:pointer">随访 CT (.nii.gz，可选·纵向)
+          <input type="file" id="inp-ct2" accept=".nii.gz,.nii" style="display:none">
+        </label>
+        <label class="badge blue" style="cursor:pointer">随访 mask (.nii.gz，可选·纵向)
+          <input type="file" id="inp-mask2" accept=".nii.gz,.nii" style="display:none">
+        </label>
         <input type="text" id="inp-patient" placeholder="患者标签（可选）"
                style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px;width:140px">
         <input type="text" id="inp-study-date" placeholder="CT 影像检查日期（可留空=取检验最新日）"
                style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px;width:240px">
+        <input type="text" id="inp-study-date2" placeholder="随访检查日期（选随访后必填）"
+               style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px;width:200px">
         <select id="inp-phase"
                 style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px">
           <option value="unknown">期相：未知</option>
@@ -310,6 +318,14 @@
         </select>
         <input type="text" id="inp-history" placeholder="临床背景（可选，如乙肝/肝硬化，不进 VLM）"
                style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px;width:260px">
+        <input type="text" id="inp-age" placeholder="年龄（GALAD 用，可选）"
+               style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px;width:130px">
+        <select id="inp-sex"
+                style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px">
+          <option value="">性别（GALAD 用，可选）</option>
+          <option value="male">男</option>
+          <option value="female">女</option>
+        </select>
         <label class="badge amber" style="cursor:pointer">
           <input type="checkbox" id="inp-open" style="vertical-align:-1px"> 同时跑 open 对照臂
         </label>
@@ -831,6 +847,8 @@ async function interpretFiles() {
   const ct = document.getElementById("inp-ct").files[0];
   const mask = document.getElementById("inp-mask").files[0];
   const labs = document.getElementById("inp-labs").files[0];
+  const ct2 = document.getElementById("inp-ct2").files[0];
+  const mask2 = document.getElementById("inp-mask2").files[0];
   if (!ct || !mask || !labs) {
     window.alert("请选择 CT、Mask 和检验报告三个文件");
     return;
@@ -854,10 +872,17 @@ async function interpretFiles() {
         fusion_modes: modes,
         patient_label: document.getElementById("inp-patient").value.trim(),
         study_date: document.getElementById("inp-study-date").value.trim(),
+        study_date2: document.getElementById("inp-study-date2").value.trim(),
         phase: document.getElementById("inp-phase").value,
         history: document.getElementById("inp-history").value.trim(),
+        age: document.getElementById("inp-age").value.trim(),
+        sex: document.getElementById("inp-sex").value,
       },
     };
+    if (ct2 && mask2) {
+      body.files.ct2 = { name: ct2.name, data_b64: await fileToB64(ct2) };
+      body.files.mask2 = { name: mask2.name, data_b64: await fileToB64(mask2) };
+    }
     const resp = await fetch("/api/interpret", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -930,25 +955,40 @@ function buildLabChart(series) {
 }
 
 function initSliceViewer(interp) {
-  const slices = interp.slices || [];
+  const followup = interp.slices || [];
+  const baseline = interp.slices_baseline || [];
   const img = document.getElementById("slice-img");
   const slider = document.getElementById("slice-slider");
   const label = document.getElementById("slice-label");
-  if (!slices.length || !img || !slider || !label) return;
+  if ((!followup.length && !baseline.length) || !img || !slider || !label) return;
+  let period = "followup";
   let idx = 0;
+  function current() {
+    return period === "baseline" && baseline.length ? baseline : followup;
+  }
   function show() {
-    img.src = "data:image/png;base64," + slices[idx].data_b64;
-    img.alt = "CT axial slice " + slices[idx].index;
-    label.textContent = "slice " + slices[idx].index + "（" + (idx + 1) + "/" + slices.length + "）";
+    const arr = current();
+    if (!arr.length) return;
+    if (idx >= arr.length) idx = arr.length - 1;
+    img.src = "data:image/png;base64," + arr[idx].data_b64;
+    img.alt = "CT axial slice " + arr[idx].index;
+    label.textContent = "slice " + arr[idx].index + "（" + (idx + 1) + "/" + arr.length +
+      "，" + (period === "baseline" ? "基线" : "随访") + "）";
+    slider.min = 0;
+    slider.max = arr.length - 1;
     slider.value = idx;
   }
   slider.min = 0;
-  slider.max = slices.length - 1;
+  slider.max = current().length - 1;
   slider.addEventListener("input", () => { idx = Number(slider.value); show(); });
   const prev = document.getElementById("slice-prev");
   const next = document.getElementById("slice-next");
   if (prev) prev.addEventListener("click", () => { if (idx > 0) { idx--; show(); } });
-  if (next) next.addEventListener("click", () => { if (idx < slices.length - 1) { idx++; show(); } });
+  if (next) next.addEventListener("click", () => { const arr = current(); if (idx < arr.length - 1) { idx++; show(); } });
+  const btnBase = document.getElementById("period-baseline");
+  const btnFollow = document.getElementById("period-followup");
+  if (btnBase) btnBase.addEventListener("click", () => { if (baseline.length) { period = "baseline"; idx = 0; show(); } });
+  if (btnFollow) btnFollow.addEventListener("click", () => { period = "followup"; idx = 0; show(); });
   show();
 }
 
@@ -1023,11 +1063,29 @@ function renderInterpretation(interp) {
   ).join(' <span style="color:var(--muted)">→</span> ');
   const nextStepsHtml = (interp.next_steps || []).map((s) => "<li>" + escapeHtml(s) + "</li>").join("");
   const cr = interp.clinical_report || {};
+  const galad = interp.galad || {};
+  const galadTier = { LOW: "低风险", INTERMEDIATE: "中风险", HIGH: "高风险" }[galad.risk_tier] || galad.risk_tier || "—";
+  const galadHtml = galad.status === "calculated"
+    ? '<p class="rd-scope"><b>GALAD 评分：</b>' +
+      escapeHtml(galad.score != null ? Number(galad.score).toFixed(3) : "—") +
+      "（风险分层：" + escapeHtml(galadTier) + "；非诊断）</p>"
+    : (galad.status === "incomplete"
+        ? '<p class="rd-scope"><b>GALAD 评分：</b>信息不足（缺：' +
+          escapeHtml((galad.missing_inputs || []).join("、")) + "）</p>"
+        : "");
+  const periodToggle = interp.slices_baseline && slices.length
+    ? '<div style="display:flex;gap:6px;margin-bottom:8px">' +
+      '<button type="button" id="period-baseline" style="cursor:pointer;background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:3px 10px;font-size:12px">基线</button>' +
+      '<button type="button" id="period-followup" style="cursor:pointer;background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:3px 10px;font-size:12px">随访</button>' +
+      "</div>"
+    : "";
   const clinicalCard =
     '<div class="card" style="margin-bottom:14px">' +
     '<h2><span class="dot" style="background:var(--ok)"></span>临床报告（供医师参考 · 非诊断）</h2><div class="body">' +
     '<p class="rd-scope"><b>影像所见：</b>' + escapeHtml(cr.imaging || "—") + "</p>" +
+    (cr.longitudinal ? '<p class="rd-scope"><b>纵向影像对比：</b>' + escapeHtml(cr.longitudinal) + "</p>" : "") +
     '<p class="rd-scope"><b>检验所见：</b>' + escapeHtml(cr.laboratory || "—") + "</p>" +
+    galadHtml +
     '<p class="rd-scope"><b>综合评估：</b>' + escapeHtml(cr.assessment || "—") + "</p>" +
     '<p class="rd-scope"><b>建议：</b>' + escapeHtml(cr.suggestion || "—") + "</p>" +
     "</div></div>";
@@ -1050,6 +1108,7 @@ function renderInterpretation(interp) {
     ? '<div class="card" style="margin-bottom:14px">' +
       '<h2><span class="dot" style="background:var(--accent)"></span>影像切片浏览</h2>' +
       '<div class="body">' +
+      periodToggle +
       '<img id="slice-img" alt="CT 轴向切片" style="width:100%;border-radius:8px;background:#000;display:block">' +
       '<input type="range" id="slice-slider" min="0" max="' + (slices.length - 1) + '" value="0" style="width:100%;margin:10px 0 6px;accent-color:var(--accent)">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">' +

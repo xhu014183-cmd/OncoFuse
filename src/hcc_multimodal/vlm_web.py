@@ -15,6 +15,8 @@ from urllib.parse import urlparse
 
 from .case_runner import run_case_vlm
 from .clinical_labs import parse_laboratory_report
+from .galad import calculate_galad_from_values
+from .imaging import compare_imaging, measure_nifti
 from .preview import extract_axial_slice_previews, extract_lesion_zoom
 from .vlm_llm import imaging_metadata_text
 from .vlm_prompting import RESEARCH_DISCLAIMER
@@ -60,6 +62,88 @@ def _lab_series(labs: Any) -> dict[str, dict[str, Any]]:
             "upper_reference": latest.reference_high if latest else None,
         }
     return series
+
+
+def _galad_result(
+    labs: Any,
+    *,
+    age_years: float | None,
+    sex: Any,
+    patient_id: str,
+) -> dict[str, Any]:
+    """Compute the GALAD score from the latest lab values (fail-closed)."""
+
+    def latest(name: str) -> float | None:
+        analyte = labs.analytes.get(name)
+        if analyte is None:
+            return None
+        for obs in reversed(analyte.observations):
+            if obs.value is not None:
+                return float(obs.value)
+        return None
+
+    result = calculate_galad_from_values(
+        latest("AFP"),
+        latest("AFP-L3%"),
+        latest("DCP"),
+        age_years=age_years,
+        sex=sex,
+        patient_id=patient_id,
+    )
+    return result.to_dict()
+
+
+def _longitudinal_imaging(
+    baseline_ct: str | Path,
+    baseline_mask: str | Path,
+    followup_ct: str | Path,
+    followup_mask: str | Path,
+    *,
+    baseline_date: str,
+    followup_date: str,
+    patient_id: str,
+) -> dict[str, Any]:
+    """Measure two timepoints and compare lesion progression deterministically."""
+    baseline = measure_nifti(
+        baseline_ct,
+        baseline_mask,
+        patient_id=patient_id,
+        study_date=baseline_date,
+        modality="CT",
+        phase="unknown",
+        provider="user_supplied",
+        inference_mode="supplied_seg",
+    )
+    followup = measure_nifti(
+        followup_ct,
+        followup_mask,
+        patient_id=patient_id,
+        study_date=followup_date,
+        modality="CT",
+        phase="unknown",
+        provider="user_supplied",
+        inference_mode="supplied_seg",
+    )
+    compare = compare_imaging(baseline, followup)
+    return {
+        "baseline": {
+            "study_date": baseline_date,
+            "volume": baseline.total_tumor_volume_ml,
+            "lesion_count": baseline.lesion_count,
+        },
+        "followup": {
+            "study_date": followup_date,
+            "volume": followup.total_tumor_volume_ml,
+            "lesion_count": followup.lesion_count,
+        },
+        "compare": {
+            "volume_change_pct": compare.volume_change_pct,
+            "new_lesion_signal": compare.new_lesion_signal,
+            "category": compare.category,
+            "baseline_total_volume_ml": compare.baseline_total_volume_ml,
+            "followup_total_volume_ml": compare.followup_total_volume_ml,
+        },
+    }
 
 
 def _risk_tier(
@@ -168,6 +252,7 @@ def _clinical_report(
     lab_series: dict[str, dict[str, Any]],
     vis_lines: list[str],
     tier_level: str,
+    longitudinal: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """Doctor-facing clinical prose: no rule-engine jargon, no diagnosis."""
     lesion_match = re.search(r"lesion_count=(\d+)", imaging_metadata)
@@ -236,12 +321,62 @@ def _clinical_report(
     else:
         suggestion = "建议按临床路径定期随访，复查影像与肿瘤标志物。"
 
-    return {
+    report = {
         "imaging": imaging_text,
         "laboratory": lab_text,
         "assessment": assessment,
         "suggestion": suggestion,
     }
+    if longitudinal:
+        compare = longitudinal.get("compare") or {}
+        change_pct = compare.get("volume_change_pct")
+        new_lesion = compare.get("new_lesion_signal")
+        base_vol = (longitudinal.get("baseline") or {}).get("volume")
+        fup_vol = (longitudinal.get("followup") or {}).get("volume")
+        base_count = (longitudinal.get("baseline") or {}).get("lesion_count")
+        fup_count = (longitudinal.get("followup") or {}).get("lesion_count")
+        parts = [
+            f"病灶体积由 {base_vol:.2f} mL 变为 {fup_vol:.2f} mL"
+            + (f"（{change_pct:+.1f}%）" if change_pct is not None else ""),
+            f"病灶数 {base_count} → {fup_count}",
+        ]
+        if new_lesion:
+            parts.append("可见新发病灶")
+        trend_word = (
+            "进展"
+            if change_pct is not None and change_pct >= 20
+            else "缓解"
+            if change_pct is not None and change_pct <= -20
+            else "基本稳定"
+        )
+        parts.append(f"影像整体提示{trend_word}")
+        long_text = "；".join(parts) + "。"
+        if lab_summary:
+            elevated_rising = [
+                row["marker"]
+                for row in lab_summary
+                if row.get("latest_above_reference")
+                and "rising" in str(row.get("trajectory") or "")
+            ]
+            falling = [
+                row["marker"]
+                for row in lab_summary
+                if "falling" in str(row.get("trajectory") or "")
+                or "plateau" in str(row.get("trajectory") or "")
+            ]
+            if trend_word == "进展" and elevated_rising:
+                long_text += (
+                    f"同时 {'、'.join(elevated_rising)} 仍高于参考且呈上升趋势，"
+                    "影像-检验进展信号一致。"
+                )
+            elif trend_word == "缓解" and falling:
+                long_text += (
+                    f"同时 {'、'.join(falling)} 呈下降趋势，影像-检验缓解信号一致。"
+                )
+            elif trend_word == "进展" and falling:
+                long_text += "但标志物呈下降趋势，影像与检验不一致，需结合临床背景评估。"
+        report["longitudinal"] = long_text
+    return report
 
 
 def _deterministic_impression(
@@ -391,6 +526,8 @@ class _Handler(BaseHTTPRequestHandler):
         ct = files.get("ct")
         mask = files.get("mask")
         labs = files.get("labs")
+        ct2 = files.get("ct2")
+        mask2 = files.get("mask2")
         if not ct or not mask or not labs:
             raise ValueError("ct, mask, and labs files are required")
         if "auditable" not in (options.get("fusion_modes") or ["auditable"]):
@@ -425,11 +562,46 @@ class _Handler(BaseHTTPRequestHandler):
                 raise ValueError(
                     "Study date unknown; provide a study date or lab observations with dates"
                 )
+            study_date2 = str(options.get("study_date2") or "").strip()
+            longitudinal_mode = bool(ct2 and mask2)
+            if longitudinal_mode:
+                if ct2 is None or mask2 is None:  # pragma: no cover
+                    raise ValueError("Follow-up CT and mask are required")
+                if not str(options.get("study_date") or "").strip():
+                    raise ValueError("纵向对比需要填写基线检查日期（study_date）")
+                if not study_date2:
+                    raise ValueError("纵向对比需要填写随访检查日期（study_date2）")
+                ct2_path = workdir / "ct2.nii.gz"
+                mask2_path = workdir / "mask2.nii.gz"
+                ct2_path.write_bytes(base64.b64decode(ct2["data_b64"]))
+                mask2_path.write_bytes(base64.b64decode(mask2["data_b64"]))
+                if (
+                    ct2_path.stat().st_size > MAX_UPLOAD_BYTES
+                    or mask2_path.stat().st_size > MAX_UPLOAD_BYTES
+                ):
+                    raise ValueError("Follow-up upload exceeds the size limit")
+                longitudinal = _longitudinal_imaging(
+                    ct_path,
+                    mask_path,
+                    ct2_path,
+                    mask2_path,
+                    baseline_date=study_date,
+                    followup_date=study_date2,
+                    patient_id=str(options.get("patient_label") or "CASE"),
+                )
+                slices_baseline = extract_axial_slice_previews(
+                    ct_path, mask_path, count=16, width=360
+                )
+            else:
+                longitudinal = None
+                slices_baseline = None
             phase = str(options.get("phase") or "").strip() or None
             output = workdir / "out"
+            vlm_ct = ct2_path if longitudinal_mode else ct_path
+            vlm_mask = mask2_path if longitudinal_mode else mask_path
             run_case_vlm(
-                nifti_image=ct_path,
-                nifti_mask=mask_path,
+                nifti_image=vlm_ct,
+                nifti_mask=vlm_mask,
                 labs_path=labs_path,
                 study_date=study_date,
                 phase=phase,
@@ -444,12 +616,24 @@ class _Handler(BaseHTTPRequestHandler):
             auditable = web.get("arms", {}).get("auditable", {})
             imaging_metadata = imaging_metadata_text(output / "imaging_evidence.json")
             lab_summary = _lab_summary(labs_evidence)
+            age_raw = str(options.get("age") or "").strip()
+            try:
+                age_years = float(age_raw) if age_raw else None
+            except ValueError:
+                age_years = None
+            sex = str(options.get("sex") or "").strip() or None
+            galad = _galad_result(
+                labs_evidence,
+                age_years=age_years,
+                sex=sex,
+                patient_id=str(options.get("patient_label") or "CASE"),
+            )
             impression = _deterministic_impression(imaging_metadata, lab_summary)
             guideline = _guideline_hint(imaging_metadata, lab_summary)
             slices = extract_axial_slice_previews(
-                ct_path, mask_path, count=16, width=360
+                vlm_ct, vlm_mask, count=16, width=360
             )
-            lesion_zoom = extract_lesion_zoom(ct_path, mask_path, width=360)
+            lesion_zoom = extract_lesion_zoom(vlm_ct, vlm_mask, width=360)
             tier = _risk_tier(imaging_metadata, lab_summary)
             lab_series = _lab_series(labs_evidence)
             auditable_report = auditable.get("report") or {}
@@ -464,6 +648,7 @@ class _Handler(BaseHTTPRequestHandler):
                 lab_series,
                 vis_lines,
                 tier["level"],
+                longitudinal,
             )
             interpretation: dict[str, Any] = {
                 "patient_label": str(options.get("patient_label") or "CASE"),
@@ -479,9 +664,12 @@ class _Handler(BaseHTTPRequestHandler):
                 "summary": _summary_text(imaging_metadata, lab_summary, tier),
                 "next_steps": _next_steps(tier["level"]),
                 "slices": slices,
+                "slices_baseline": slices_baseline,
+                "longitudinal": longitudinal,
                 "lesion_zoom": lesion_zoom,
                 "clinical_impression": impression,
                 "guideline_hint": guideline,
+                "galad": galad,
                 "clinical_report": clinical_report,
                 "joint_interpretation": _joint_interpretation(
                     imaging_metadata, lab_summary, impression, guideline

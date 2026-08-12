@@ -1,12 +1,16 @@
 from pathlib import Path
 
+import pytest
+
 from hcc_multimodal.clinical_labs import parse_laboratory_report
 from hcc_multimodal.vlm_web import (
     _clinical_report,
     _deterministic_impression,
+    _galad_result,
     _guideline_hint,
     _joint_interpretation,
     _lab_series,
+    _longitudinal_imaging,
     _risk_tier,
 )
 
@@ -214,3 +218,92 @@ def test_clinical_report_discordant():
 def test_clinical_report_no_lesion():
     report = _clinical_report("lesion_count=0", [], {}, [], "low")
     assert "未检出" in report["assessment"]
+
+
+def test_clinical_report_longitudinal_progression():
+    metadata = "lesion_count=2; total_volume_ml=1.632; max_extent_mm=22.5"
+    labs = [
+        {
+            "marker": "AFP",
+            "latest_value": 85.3,
+            "latest_unit": "ng/mL",
+            "latest_above_reference": True,
+            "trajectory": "persistent_rising",
+        }
+    ]
+    longitudinal = {
+        "baseline": {"volume": 0.692, "lesion_count": 1},
+        "followup": {"volume": 1.632, "lesion_count": 2},
+        "compare": {"volume_change_pct": 135.8, "new_lesion_signal": True},
+    }
+
+    report = _clinical_report(
+        metadata,
+        labs,
+        {"AFP": {"points": [], "upper_reference": 7.0}},
+        [],
+        "high",
+        longitudinal,
+    )
+
+    assert "病灶体积由 0.69 mL 变为 1.63 mL（+135.8%）" in report["longitudinal"]
+    assert "可见新发病灶" in report["longitudinal"]
+    assert "进展信号一致" in report["longitudinal"]
+
+
+def test_longitudinal_imaging_synthetic_pair():
+    inputs = Path(__file__).resolve().parent.parent / "demo-output" / "input"
+    if not (inputs / "baseline_ct.nii.gz").exists():
+        pytest.skip("synthetic longitudinal inputs are not present")
+
+    result = _longitudinal_imaging(
+        inputs / "baseline_ct.nii.gz",
+        inputs / "baseline_tumor_mask.nii.gz",
+        inputs / "followup_ct.nii.gz",
+        inputs / "followup_tumor_mask.nii.gz",
+        baseline_date="2026-01-15",
+        followup_date="2026-07-15",
+        patient_id="DEMO",
+    )
+
+    compare = result["compare"]
+    assert compare["volume_change_pct"] is not None
+    assert compare["volume_change_pct"] > 0
+    assert compare["new_lesion_signal"] is not None
+
+
+def test_galad_calculated_with_full_inputs(tmp_path: Path):
+    path = tmp_path / "labs.txt"
+    path.write_text(
+        "2026-01-15 AFP 6 ng/mL 0-7\n"
+        "2026-07-20 AFP 96 ng/mL 0-7\n"
+        "2026-07-20 AFP-L3% 12 % 0-10\n"
+        "2026-01-15 DCP 20 mAU/mL 0-40\n"
+        "2026-07-20 DCP 80 mAU/mL 0-40\n",
+        encoding="utf-8",
+    )
+    labs = parse_laboratory_report(path, patient_id="CASE")
+
+    result = _galad_result(
+        labs, age_years=60.0, sex="male", patient_id="CASE"
+    )
+
+    assert result["status"] == "calculated"
+    assert result["score"] is not None
+    assert result["risk_tier"] in {"LOW", "INTERMEDIATE", "HIGH"}
+
+
+def test_galad_incomplete_without_age(tmp_path: Path):
+    path = tmp_path / "labs.txt"
+    path.write_text(
+        "2026-07-20 AFP 96 ng/mL 0-7\n"
+        "2026-07-20 AFP-L3% 12 % 0-10\n"
+        "2026-07-20 DCP 80 mAU/mL 0-40\n",
+        encoding="utf-8",
+    )
+    labs = parse_laboratory_report(path, patient_id="CASE")
+
+    result = _galad_result(labs, age_years=None, sex="male", patient_id="CASE")
+
+    assert result["status"] == "incomplete"
+    assert "age_years" in result["missing_inputs"]

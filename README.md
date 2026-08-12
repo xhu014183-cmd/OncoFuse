@@ -192,6 +192,13 @@ After upload the page shows:
   top, the patient's right on the image left).
 - **Lab trend chart** with ULN reference lines, per-marker change percentages,
   and a timeline aligning the CT date with each lab date.
+- **Longitudinal imaging comparison** (optional second timepoint): upload a
+  follow-up CT + mask and the report adds volume change, new-lesion detection,
+  and a progression / response / stable reading combined with the lab trend;
+  the slice viewer switches between baseline and follow-up.
+- **GALAD score**: when age and sex are supplied, the report includes the GALAD
+  score and risk tier (LOW / INTERMEDIATE / HIGH) derived from AFP, AFP-L3%,
+  DCP, age and sex — explicitly non-diagnostic.
 - **Risk-tier badge** (high / medium / low) derived from a guideline-style
   heuristic (lesion size × marker thresholds) — explicitly non-diagnostic.
 - **Graded audit**: definite diagnoses ("confirmed HCC") still block the
