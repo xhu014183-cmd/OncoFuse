@@ -39,6 +39,7 @@ python -m venv .venv
 
 | 能力 | 命令 | 状态 |
 |---|---|---|
+| LiON-inspired 单期 CT 多模态报告 | `hcc-demo run-report` | ✅ 1.2 输入合同 / fail-closed |
 | 合成端到端 demo | `hcc-demo run-demo` | ✅ 稳定 |
 | 纵向 NIfTI + 掩膜分析 | `hcc-demo analyze` | ✅ 稳定 |
 | DICOM CT + SEG 转换（几何 QC） | `hcc-demo convert-dicom-seg` | ✅ 稳定 |
@@ -49,9 +50,23 @@ python -m venv .venv
 | 锁定多中心验证工作流 | `hcc-demo validate-research-cohort` … | ✅ 研究用 |
 | CPU patch 提取浏览器演示 | `hcc-demo vlm-skeleton-web` | ⚠️ **mock**，无模型 |
 | VLM 任务 prompt（可审计 / 放开） | `hcc-demo vlm-prompt` | ✅ 双模式 |
-| 双模式 VLM 真实 LLM 演示（fail-closed 审计） | `hcc-demo vlm-live` | ✅ fail-closed |
+| 双模式 VLM prompt 真实 LLM 对照（文本 LLM，可选 `--image` 附视觉输入；fail-closed 审计） | `hcc-demo vlm-live` | ✅ fail-closed |
 | 本地可视化服务（上传影像+检验→解读） | `hcc-demo vlm-web` | ✅ 本地 |
 | 真实 3D VLM 推理（M3D-LaMed） | — | 🗺️ Roadmap，见下 |
+
+### LiON-inspired HCC 报告链
+
+`run-report` 是当前推荐入口：现有 SEG 先形成像素级→病灶级→患者级定量证据；可选 GLM 只读取重新渲染的去标识化 PNG 并描述可见征象；规则层把影像交叉检查、标准化检验趋势和治疗锚点形成锁定裁决。`deepseek-r1-distill-qwen-32b` 只生成不含数字的可选中文辅助解读，不能修改正式 JSON；其他支持稳定 JSON 的 DeepSeek 模型仍可走受控结构化报告通道。
+
+```powershell
+hcc-demo run-report `
+  --case-input examples\case_input.recommended.json `
+  --output case-output `
+  --glm-mode off `
+  --report-mode deterministic
+```
+
+实时模式需要显式改为 `--glm-mode live --report-mode live`；加 `--require-live-models` 后，任一模型未实际成功或输出未通过审计都会返回非零退出码，同时保留降级审计。详见 [实施与运行手册](docs/LION_INSPIRED_HCC_PIPELINE_PLAN.md) 和 [病例输入规范](docs/CASE_INPUT_SPEC.md)。
 
 ## Roadmap
 

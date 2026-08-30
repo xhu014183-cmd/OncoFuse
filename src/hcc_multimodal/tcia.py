@@ -212,7 +212,7 @@ def convert_ct_and_mass_seg(
     output.mkdir(parents=True, exist_ok=True)
 
     ct_by_uid: dict[str, Any] = {}
-    for path in ct_dir.glob("*.dcm"):
+    for path in ct_dir.rglob("*.dcm"):
         dataset = pydicom.dcmread(_io_path(path))
         if hasattr(dataset, "PixelData"):
             ct_by_uid[str(dataset.SOPInstanceUID)] = dataset

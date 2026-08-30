@@ -29,6 +29,7 @@ from .preview import create_overlay_montage
 from .prompting import build_report_prompt, write_prompt_bundle
 from .public_cohort import prepare_public_cohort
 from .registration import register_volumes
+from .report_pipeline import run_report_pipeline
 from .research_cohort import build_research_cohort, validate_research_cohort
 from .research_evaluation import evaluate_research_cohort, validate_adjudications
 from .research_models import (
@@ -44,10 +45,13 @@ from .schemas import (
     SCHEMA_VERSION,
     ClinicalVerdict,
     ControlledReport,
+    GlmImagingEvidence,
     ImageEmbeddingEvidence,
+    ImagingCrosscheckEvidence,
     ImagingEvidence,
     JsonModel,
     LabEvidence,
+    LionInspiredImagingEvidence,
     LongitudinalImagingEvidence,
     MultimodalCaseEvidence,
     RegistrationEvidence,
@@ -73,11 +77,14 @@ def _schema_models() -> dict[str, type[JsonModel]]:
     return {
         "clinical-verdict": ClinicalVerdict,
         "controlled-report": ControlledReport,
+        "glm-imaging-evidence": GlmImagingEvidence,
         "evaluation-cohort": EvaluationCohort,
         "image-embedding-evidence": ImageEmbeddingEvidence,
         "imaging-evidence": ImagingEvidence,
+        "imaging-crosscheck-evidence": ImagingCrosscheckEvidence,
         "lab-evidence": LabEvidence,
         "longitudinal-imaging-evidence": LongitudinalImagingEvidence,
+        "lion-inspired-imaging-evidence": LionInspiredImagingEvidence,
         "multimodal-case-evidence": MultimodalCaseEvidence,
         "research-protocol": ResearchProtocol,
         "research-cohort-manifest": ResearchCohortManifest,
@@ -520,6 +527,24 @@ def main() -> None:
     run = subparsers.add_parser("run-demo", help="Generate and run the complete synthetic case")
     run.add_argument("--output", default="demo-output")
     _add_encoder_arguments(run, default="statistical-v1")
+    run_report = subparsers.add_parser(
+        "run-report",
+        help="Run the unified LiON-inspired/GLM/laboratory/DeepSeek report pipeline",
+    )
+    run_report.add_argument("--case-input", required=True)
+    run_report.add_argument(
+        "--output",
+        default=None,
+        help="Override the output_dir declared in the case input",
+    )
+    run_report.add_argument("--glm-mode", choices=("off", "live"), default="off")
+    run_report.add_argument(
+        "--report-mode",
+        choices=("deterministic", "live"),
+        default="deterministic",
+    )
+    run_report.add_argument("--require-live-models", action="store_true")
+    run_report.add_argument("--timeout", type=float, default=180.0)
     public = subparsers.add_parser(
         "run-public-demo",
         help="Download TCIA HCC_003, convert its Mass SEG to NIfTI, and run a composite demo",
@@ -809,15 +834,16 @@ def main() -> None:
     summarize.add_argument("--llm-response", default=None, help="Optional offline JSON rewrite to validate; external LLM calls remain disabled")
     summarize.add_argument("--output", required=True)
     analyze_case = subparsers.add_parser("analyze-case", help="Run all three CPU-friendly evidence lines")
-    analyze_case.add_argument("--dicom-dir", required=True)
+    analyze_case.add_argument("--case-input", default=None, help="Unified patient-level case JSON; replaces the individual input arguments")
+    analyze_case.add_argument("--dicom-dir", default=None)
     analyze_case.add_argument("--seg", default=None)
     analyze_case.add_argument("--image-evidence", default=None)
-    analyze_case.add_argument("--labs", required=True)
+    analyze_case.add_argument("--labs", default=None)
     analyze_case.add_argument("--hpi", default=None)
-    analyze_case.add_argument("--patient-id", required=True)
+    analyze_case.add_argument("--patient-id", default=None)
     analyze_case.add_argument("--phase", default=None)
     analyze_case.add_argument("--llm-response", default=None, help="Optional offline JSON rewrite to validate; external LLM calls remain disabled")
-    analyze_case.add_argument("--output", required=True)
+    analyze_case.add_argument("--output", default=None)
     vlm_skeleton = subparsers.add_parser(
         "vlm-skeleton",
         help="Run a CPU-only patch extraction and mock VLM demonstration",
@@ -941,6 +967,28 @@ def main() -> None:
         paths = generate_synthetic_case(args.output)
         for name, path in paths.items():
             print(f"{name}: {path}")
+    elif args.command == "run-report":
+        if args.timeout <= 0:
+            parser.error("--timeout must be positive")
+        result = run_report_pipeline(
+            args.case_input,
+            output_dir=args.output,
+            glm_mode=cast(Literal["off", "live"], args.glm_mode),
+            report_mode=cast(Literal["deterministic", "live"], args.report_mode),
+            require_live_models=args.require_live_models,
+            timeout_seconds=args.timeout,
+        )
+        print(f"Wrote {result.output_dir / 'controlled-report.json'}")
+        print(f"Wrote {result.output_dir / 'controlled-report.md'}")
+        print(f"Wrote {result.output_dir / 'pipeline-audit.json'}")
+        if not result.strict_success:
+            parser.exit(
+                status=2,
+                message=(
+                    "Strict live-model acceptance failed; audit artifacts were retained in "
+                    f"{result.output_dir}\n"
+                ),
+            )
     elif args.command == "run-demo":
         verdict_path = run_demo(
             args.output,
@@ -1263,9 +1311,50 @@ def main() -> None:
         print(f"Wrote {summary_path}")
         print(f"Wrote {markdown_path}")
     elif args.command == "analyze-case":
+        case_loader = None
+        index_date = None
+        if args.case_input:
+            from .case_input_loader import CaseInputLoader
+
+            case_loader = CaseInputLoader(args.case_input)
+            if case_loader.imaging_source_type != "dicom":
+                parser.error(
+                    "analyze-case is the legacy DICOM-only entry point; use run-report "
+                    "for case_input 1.2 NIfTI inputs"
+                )
+            args.dicom_dir = str(case_loader.dicom_dir)
+            args.seg = str(case_loader.seg_path) if case_loader.seg_path else None
+            args.image_evidence = (
+                str(case_loader.image_evidence_path)
+                if case_loader.image_evidence_path
+                else None
+            )
+            args.labs = str(case_loader.labs_path)
+            args.hpi = str(case_loader.hpi_path) if case_loader.hpi_path else None
+            args.patient_id = case_loader.patient_id
+            args.phase = case_loader.phase or args.phase
+            args.output = str(case_loader.output_dir)
+            index_date = case_loader.index_date
+        missing_args = [
+            name
+            for name, value in (
+                ("--dicom-dir", args.dicom_dir),
+                ("--labs", args.labs),
+                ("--patient-id", args.patient_id),
+                ("--output", args.output),
+            )
+            if not value
+        ]
+        if missing_args:
+            parser.error(
+                "analyze-case requires --case-input or all of " + ", ".join(missing_args)
+            )
+        if case_loader is not None:
+            case_loader.write_normalized_manifest(args.output)
         imaging = parse_imaging_study(args.dicom_dir, patient_id=args.patient_id, seg_path=args.seg, image_evidence_path=args.image_evidence, phase=args.phase, output_dir=args.output)
         labs = parse_laboratory_report(args.labs, patient_id=args.patient_id)
-        timeline = parse_hpi_timeline(args.hpi, patient_id=args.patient_id, labs=labs, imaging=imaging, index_date=imaging.study_date if imaging.study_date != "unknown" else None) if args.hpi else None
+        timeline_cutoff = index_date or (imaging.study_date if imaging.study_date != "unknown" else None)
+        timeline = parse_hpi_timeline(args.hpi, patient_id=args.patient_id, labs=labs, imaging=imaging, index_date=timeline_cutoff) if args.hpi else None
         summary_path, markdown_path = _write_three_line_outputs(imaging=imaging, labs=labs, timeline=timeline, output=args.output, llm_response=args.llm_response)
         print(f"Wrote {summary_path}")
         print(f"Wrote {markdown_path}")

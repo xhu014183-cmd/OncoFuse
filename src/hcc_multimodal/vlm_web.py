@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import shutil
 import tempfile
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 from urllib.parse import urlparse
 
 from .case_runner import run_case_vlm
@@ -18,6 +19,7 @@ from .clinical_labs import parse_laboratory_report
 from .galad import calculate_galad_from_values
 from .imaging import compare_imaging, measure_nifti
 from .preview import extract_axial_slice_previews, extract_lesion_zoom
+from .report_pipeline import run_report_pipeline
 from .vlm_llm import imaging_metadata_text
 from .vlm_prompting import RESEARCH_DISCLAIMER
 
@@ -211,6 +213,7 @@ def _next_steps(tier_level: str) -> list[str]:
             "结合临床背景综合评估",
         ],
         "low": ["按临床路径随访", "定期复查影像与标志物"],
+        "unavailable": ["补充可验证的病灶定位或 SEG", "由影像科医师复核完整检查"],
     }
     return steps.get(tier_level, steps["low"])
 
@@ -483,6 +486,23 @@ class _Handler(BaseHTTPRequestHandler):
                     "service": "vlm-web",
                     "version": SERVICE_VERSION,
                     "started_at": getattr(self.server, "generated_at", ""),
+                    "models": {
+                        "zhipu": {
+                            "configured": bool(os.environ.get("ZHIPU_API_KEY")),
+                            "model": os.environ.get("ZHIPU_VISION_MODEL")
+                            or "glm-4.6v-flash",
+                        },
+                        "deepseek": {
+                            "configured": bool(
+                                os.environ.get("DEEPSEEK_API_KEY")
+                                or os.environ.get("LLM_API_KEY")
+                                or os.environ.get("DASHSCOPE_API_KEY")
+                            ),
+                            "model": os.environ.get("DEEPSEEK_MODEL")
+                            or os.environ.get("LLM_MODEL_NAME")
+                            or "unconfigured",
+                        },
+                    },
                 },
                 status=200,
             )
@@ -528,21 +548,23 @@ class _Handler(BaseHTTPRequestHandler):
         labs = files.get("labs")
         ct2 = files.get("ct2")
         mask2 = files.get("mask2")
-        if not ct or not mask or not labs:
-            raise ValueError("ct, mask, and labs files are required")
+        if not ct or not labs:
+            raise ValueError("ct and labs files are required; mask is optional")
         if "auditable" not in (options.get("fusion_modes") or ["auditable"]):
             raise ValueError("the auditable arm is the required main path")
 
         workdir = Path(tempfile.mkdtemp(prefix="oncofuse-vlm-web-"))
         try:
             ct_path = workdir / "ct.nii.gz"
-            mask_path = workdir / "mask.nii.gz"
             ct_path.write_bytes(base64.b64decode(ct["data_b64"]))
-            mask_path.write_bytes(base64.b64decode(mask["data_b64"]))
             if ct_path.stat().st_size > MAX_UPLOAD_BYTES:
                 raise ValueError("CT upload exceeds the size limit")
-            if mask_path.stat().st_size > MAX_UPLOAD_BYTES:
-                raise ValueError("Mask upload exceeds the size limit")
+            mask_path: Path | None = None
+            if mask:
+                mask_path = workdir / "mask.nii.gz"
+                mask_path.write_bytes(base64.b64decode(mask["data_b64"]))
+                if mask_path.stat().st_size > MAX_UPLOAD_BYTES:
+                    raise ValueError("Mask upload exceeds the size limit")
             labs_path = workdir / "labs.txt"
             labs_path.write_text(str(labs.get("content") or ""), encoding="utf-8")
             labs_evidence = parse_laboratory_report(
@@ -563,8 +585,14 @@ class _Handler(BaseHTTPRequestHandler):
                     "Study date unknown; provide a study date or lab observations with dates"
                 )
             study_date2 = str(options.get("study_date2") or "").strip()
+            if bool(ct2) != bool(mask2):
+                raise ValueError("Follow-up CT and mask must be supplied together")
             longitudinal_mode = bool(ct2 and mask2)
             if longitudinal_mode:
+                if mask_path is None:
+                    raise ValueError(
+                        "Longitudinal mode requires a baseline mask; single-timepoint mode allows no mask"
+                    )
                 if ct2 is None or mask2 is None:  # pragma: no cover
                     raise ValueError("Follow-up CT and mask are required")
                 if not str(options.get("study_date") or "").strip():
@@ -599,22 +627,113 @@ class _Handler(BaseHTTPRequestHandler):
             output = workdir / "out"
             vlm_ct = ct2_path if longitudinal_mode else ct_path
             vlm_mask = mask2_path if longitudinal_mode else mask_path
-            run_case_vlm(
-                nifti_image=vlm_ct,
-                nifti_mask=vlm_mask,
-                labs_path=labs_path,
-                study_date=study_date,
-                phase=phase,
-                output_dir=output,
-                fusion_modes=tuple(options.get("fusion_modes") or ["auditable"]),
-                max_tokens=int(options.get("max_tokens") or 1024),
-                temperature=float(options.get("temperature") or 0.3),
-                json_object=bool(options.get("json_object") or False),
+            glm_mode = str(options.get("glm_mode") or "off")
+            report_mode = str(options.get("report_mode") or "deterministic")
+            if glm_mode not in {"off", "live"}:
+                raise ValueError("glm_mode must be off or live")
+            if report_mode not in {"deterministic", "live"}:
+                raise ValueError("report_mode must be deterministic or live")
+            if (glm_mode == "live" or report_mode == "live") and not bool(
+                options.get("external_models_confirmed")
+            ):
+                raise ValueError(
+                    "Confirm that only rerendered deidentified images may be uploaded before enabling live models"
+                )
+            imaging_origin = str(options.get("imaging_origin") or "user_supplied")
+            laboratory_origin = str(
+                options.get("laboratory_origin") or "user_supplied"
+            )
+            pairing_status = str(
+                options.get("pairing_status") or "user_supplied_unverified"
+            )
+            relationship_statement = str(
+                options.get("data_relationship")
+                or "Web-uploaded imaging and laboratory pairing has not been independently verified"
+            )
+            case_path = workdir / "case-input.json"
+            case_payload = {
+                "schema_version": "1.2.0",
+                "case_id": str(options.get("case_id") or "WEB_CASE"),
+                "patient_id": str(options.get("patient_label") or "CASE"),
+                "clinical_task": str(options.get("clinical_task") or "unspecified"),
+                "index_date": study_date2 if longitudinal_mode else study_date,
+                "data_relationship": {
+                    "imaging_origin": imaging_origin,
+                    "laboratory_origin": laboratory_origin,
+                    "pairing_status": pairing_status,
+                    "statement": relationship_statement,
+                },
+                "imaging": {
+                    "source_type": "nifti",
+                    "modality": "CT",
+                    "nifti_image": str(vlm_ct),
+                    "dicom_dir": None,
+                    "seg": str(vlm_mask) if vlm_mask is not None else None,
+                    "seg_role": (
+                        str(options.get("seg_role") or "user_supplied")
+                        if vlm_mask is not None
+                        else None
+                    ),
+                    "study_date": study_date2 if longitudinal_mode else study_date,
+                    "phase": phase or "unknown",
+                },
+                "laboratory": {
+                    "source_type": "file",
+                    "file_path": str(labs_path),
+                },
+                "output_dir": str(output / "unified"),
+            }
+            case_path.write_text(
+                json.dumps(case_payload, ensure_ascii=False), encoding="utf-8"
+            )
+            unified_result = run_report_pipeline(
+                case_path,
+                output_dir=output / "unified",
+                glm_mode=cast(Literal["off", "live"], glm_mode),
+                report_mode=cast(Literal["deterministic", "live"], report_mode),
                 timeout_seconds=float(options.get("timeout_seconds") or 120.0),
             )
-            web = json.loads((output / "web_demo.json").read_text(encoding="utf-8"))
+            unified_web = json.loads(
+                (output / "unified" / "web_demo.json").read_text(encoding="utf-8")
+            )
+            if vlm_mask is not None:
+                legacy_output = output / "legacy"
+                run_case_vlm(
+                    nifti_image=vlm_ct,
+                    nifti_mask=vlm_mask,
+                    labs_path=labs_path,
+                    study_date=study_date,
+                    phase=phase,
+                    output_dir=legacy_output,
+                    fusion_modes=tuple(options.get("fusion_modes") or ["auditable"]),
+                    max_tokens=int(options.get("max_tokens") or 1024),
+                    temperature=float(options.get("temperature") or 0.3),
+                    json_object=bool(options.get("json_object") or False),
+                    timeout_seconds=float(options.get("timeout_seconds") or 120.0),
+                )
+                web = json.loads(
+                    (legacy_output / "web_demo.json").read_text(encoding="utf-8")
+                )
+                imaging_metadata = imaging_metadata_text(
+                    legacy_output / "imaging_evidence.json"
+                )
+            else:
+                lion_patient = unified_web["lion_inspired"]["patient_evidence"]
+                imaging_metadata = (
+                    "Imaging measurements (deterministic): lesion_count=unavailable; "
+                    "total_volume_ml=unavailable; max_extent_mm=unavailable; quality=unavailable"
+                )
+                web = {
+                    "arms": {
+                        "auditable": {
+                            "audit_status": "pass",
+                            "report": unified_web["controlled_report"],
+                            "validation": {"errors": [], "soft_warnings": []},
+                        }
+                    },
+                    "lion_patient_evidence": lion_patient,
+                }
             auditable = web.get("arms", {}).get("auditable", {})
-            imaging_metadata = imaging_metadata_text(output / "imaging_evidence.json")
             lab_summary = _lab_summary(labs_evidence)
             age_raw = str(options.get("age") or "").strip()
             try:
@@ -630,11 +749,22 @@ class _Handler(BaseHTTPRequestHandler):
             )
             impression = _deterministic_impression(imaging_metadata, lab_summary)
             guideline = _guideline_hint(imaging_metadata, lab_summary)
-            slices = extract_axial_slice_previews(
-                vlm_ct, vlm_mask, count=16, width=360
-            )
-            lesion_zoom = extract_lesion_zoom(vlm_ct, vlm_mask, width=360)
+            if vlm_mask is not None:
+                slices = extract_axial_slice_previews(
+                    vlm_ct, vlm_mask, count=16, width=360
+                )
+                lesion_zoom = extract_lesion_zoom(vlm_ct, vlm_mask, width=360)
+            else:
+                slices = []
+                lesion_zoom = None
             tier = _risk_tier(imaging_metadata, lab_summary)
+            if vlm_mask is None:
+                impression = (
+                    "确定性提示：未提供 SEG，病灶定量证据不可用；"
+                    "不得将其解释为影像无病灶（非诊断）。"
+                )
+                guideline = "指南启发式不可用：缺少可验证的病灶定量证据。"
+                tier = {"level": "unavailable", "label": "缺少 SEG，风险分层不适用"}
             lab_series = _lab_series(labs_evidence)
             auditable_report = auditable.get("report") or {}
             vis_lines = [
@@ -650,6 +780,17 @@ class _Handler(BaseHTTPRequestHandler):
                 tier["level"],
                 longitudinal,
             )
+            if vlm_mask is None:
+                clinical_report = {
+                    "imaging": "未提供 SEG，LiON-inspired 病灶定量不可用。",
+                    "laboratory": "；".join(
+                        f"{row['marker']} {row['latest_value']} {row['latest_unit'] or ''}"
+                        for row in lab_summary
+                    )
+                    or "暂无可用检验数据",
+                    "assessment": "证据不足，不能形成患者级影像阴性结论。",
+                    "suggestion": "需由影像科医师复核完整检查并补充可验证的病灶定位。",
+                }
             interpretation: dict[str, Any] = {
                 "patient_label": str(options.get("patient_label") or "CASE"),
                 "phase": phase or "unknown",
@@ -685,8 +826,26 @@ class _Handler(BaseHTTPRequestHandler):
                 ],
                 "fusion_modes": list(options.get("fusion_modes") or ["auditable"]),
                 "disclaimer": RESEARCH_DISCLAIMER,
+                "lion_inspired": unified_web["lion_inspired"],
+                "glm_imaging": unified_web["glm_imaging"],
+                "imaging_crosscheck": unified_web["imaging_crosscheck"],
+                "clinical_verdict": unified_web["clinical_verdict"],
+                "controlled_report": unified_web["controlled_report"],
+                "deepseek_narrative": unified_web["deepseek_narrative"],
+                "data_relationship": unified_web["data_relationship"],
+                "degraded": unified_result.degraded,
             }
-            return {"ok": True, "interpretation": interpretation, "web_demo": web}
+            artifact_index = {
+                name: {"available": (output / "unified" / name).is_file()}
+                for name in unified_result.artifact_index
+            }
+            return {
+                "ok": True,
+                "interpretation": interpretation,
+                "web_demo": web,
+                "pipeline": unified_web,
+                "artifact_index": artifact_index,
+            }
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
 

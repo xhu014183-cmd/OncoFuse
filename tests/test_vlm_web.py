@@ -1,4 +1,6 @@
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -8,6 +10,7 @@ from hcc_multimodal.vlm_web import (
     _deterministic_impression,
     _galad_result,
     _guideline_hint,
+    _Handler,
     _joint_interpretation,
     _lab_series,
     _longitudinal_imaging,
@@ -307,3 +310,153 @@ def test_galad_incomplete_without_age(tmp_path: Path):
 
     assert result["status"] == "incomplete"
     assert "age_years" in result["missing_inputs"]
+
+
+LAB_TEXT = """2026-01-15 AFP 6.0 ng/mL 0-7
+2026-04-15 AFP 18.0 ng/mL 0-7
+2026-07-15 AFP 85.3 ng/mL 0-7
+2026-01-15 DCP 25.0 mAU/mL 0-40
+2026-07-15 DCP 68.0 mAU/mL 0-40
+"""
+
+
+def _b64(path: Path) -> str:
+    import base64
+
+    return base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def _handler() -> "_Handler":
+    return _Handler.__new__(_Handler)
+
+
+def _disable_llm(monkeypatch) -> None:
+    def unavailable(*_args, **_kwargs):
+        raise RuntimeError("External LLM configuration is unavailable")
+
+    monkeypatch.setattr("hcc_multimodal.vlm_llm.call_vlm_llm", unavailable)
+
+
+def test_interpret_single_timepoint(tmp_path: Path, monkeypatch):
+    from hcc_multimodal.synthetic import generate_synthetic_case
+
+    paths = generate_synthetic_case(tmp_path / "case")
+    _disable_llm(monkeypatch)
+    request = {
+        "files": {
+            "ct": {"name": "ct.nii.gz", "data_b64": _b64(paths["followup_image"])},
+            "mask": {"name": "mask.nii.gz", "data_b64": _b64(paths["followup_mask"])},
+            "labs": {"name": "labs.txt", "content": LAB_TEXT},
+        },
+        "options": {
+            "fusion_modes": ["auditable"],
+            "patient_label": "CASE",
+            "study_date": "2026-07-15",
+            "phase": "portal_venous",
+        },
+    }
+    result = _handler()._interpret(request)
+    assert result["ok"] is True
+    interp = result["interpretation"]
+    assert interp["study_date"] == "2026-07-15"
+    assert interp["risk_tier"]["level"] in {"low", "medium", "high"}
+    assert interp["slices"]
+    assert result["web_demo"]["arms"]["auditable"]["audit_status"] == "pass"
+
+
+def test_interpret_longitudinal_mode(tmp_path: Path, monkeypatch):
+    from hcc_multimodal.synthetic import generate_synthetic_case
+
+    paths = generate_synthetic_case(tmp_path / "case")
+    _disable_llm(monkeypatch)
+    request = {
+        "files": {
+            "ct": {"name": "ct.nii.gz", "data_b64": _b64(paths["baseline_image"])},
+            "mask": {"name": "mask.nii.gz", "data_b64": _b64(paths["baseline_mask"])},
+            "ct2": {"name": "ct2.nii.gz", "data_b64": _b64(paths["followup_image"])},
+            "mask2": {"name": "mask2.nii.gz", "data_b64": _b64(paths["followup_mask"])},
+            "labs": {"name": "labs.txt", "content": LAB_TEXT},
+        },
+        "options": {
+            "fusion_modes": ["auditable"],
+            "patient_label": "CASE",
+            "study_date": "2026-01-15",
+            "study_date2": "2026-07-15",
+        },
+    }
+    result = _handler()._interpret(request)
+    assert result["ok"] is True
+    interp = result["interpretation"]
+    assert interp["longitudinal"] is not None
+    assert interp["longitudinal"]["compare"]["volume_change_pct"] is not None
+    assert interp["slices_baseline"]
+
+
+def test_interpret_missing_files_raises():
+    with pytest.raises(ValueError, match="required"):
+        _handler()._interpret({"files": {}, "options": {}})
+
+
+def test_interpret_requires_auditable_arm(tmp_path: Path, monkeypatch):
+    from hcc_multimodal.synthetic import generate_synthetic_case
+
+    paths = generate_synthetic_case(tmp_path / "case")
+    _disable_llm(monkeypatch)
+    request = {
+        "files": {
+            "ct": {"name": "ct.nii.gz", "data_b64": _b64(paths["followup_image"])},
+            "mask": {"name": "mask.nii.gz", "data_b64": _b64(paths["followup_mask"])},
+            "labs": {"name": "labs.txt", "content": LAB_TEXT},
+        },
+        "options": {
+            "fusion_modes": ["open"],
+            "study_date": "2026-07-15",
+        },
+    }
+    with pytest.raises(ValueError, match="auditable"):
+        _handler()._interpret(request)
+
+
+def test_interpret_allows_missing_mask_without_zero_lesion_claim(tmp_path: Path):
+    from hcc_multimodal.synthetic import generate_synthetic_case
+
+    paths = generate_synthetic_case(tmp_path / "case")
+    request = {
+        "files": {
+            "ct": {"name": "ct.nii.gz", "data_b64": _b64(paths["followup_image"])},
+            "labs": {"name": "labs.txt", "content": LAB_TEXT},
+        },
+        "options": {
+            "fusion_modes": ["auditable"],
+            "patient_label": "CASE",
+            "study_date": "2026-07-15",
+        },
+    }
+    result = _handler()._interpret(request)
+    assert result["ok"] is True
+    lion = result["pipeline"]["lion_inspired"]
+    assert lion["patient_evidence"]["lesion_count"] is None
+    assert "不得将其解释为影像无病灶" in result["interpretation"][
+        "clinical_impression"
+    ]
+
+
+def test_health_exposes_model_status_without_secrets(monkeypatch):
+    monkeypatch.setenv("ZHIPU_API_KEY", "secret-zhipu")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "secret-deepseek")
+    handler = _handler()
+    handler.path = "/api/health"
+    handler.server = SimpleNamespace(generated_at="2026-08-24T00:00:00Z")
+    captured = {}
+
+    def capture(payload, *, status):
+        captured["payload"] = payload
+        captured["status"] = status
+
+    handler._send_json = capture
+    handler.do_GET()
+    serialized = json.dumps(captured)
+    assert captured["status"] == 200
+    assert captured["payload"]["models"]["zhipu"]["configured"] is True
+    assert "secret-zhipu" not in serialized
+    assert "secret-deepseek" not in serialized

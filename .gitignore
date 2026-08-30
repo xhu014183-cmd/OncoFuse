@@ -12,6 +12,7 @@ demo-output/
 public-data/
 embedding-output/
 case-output/
+case-output-live-smoke-*/
 synthetic-case/
 *.dcm
 *.npy

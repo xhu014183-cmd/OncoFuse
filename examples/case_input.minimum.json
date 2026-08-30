@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.1.0",
+  "case_id": "CASE_MINIMUM_001",
+  "patient_id": "RESEARCH_001",
+  "clinical_task": "diagnostic_workup",
+  "index_date": "2026-07-20",
+  "imaging": {
+    "dicom_dir": "replace-with-deidentified-dicom-directory",
+    "phase": "unknown"
+  },
+  "laboratory": {
+    "source_type": "inline",
+    "inline": {
+      "format": "json",
+      "content": "{\"observations\":[{\"date\":\"2026-07-20\",\"marker\":\"AFP\",\"value\":\"96\",\"unit\":\"ng/mL\",\"referenceRange\":\"0-7\"},{\"date\":\"2026-07-20\",\"marker\":\"DCP\",\"value\":\"80\",\"unit\":\"mAU/mL\",\"referenceRange\":\"0-40\"}]}"
+    }
+  },
+  "output_dir": "case-output-minimum"
+}

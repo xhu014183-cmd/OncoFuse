@@ -147,6 +147,18 @@ def test_diagnostic_assertion_is_blocked(tmp_path: Path):
     assert "DIAGNOSTIC_ASSERTION" in {item["code"] for item in validation["errors"]}
 
 
+def test_positive_assertion_after_negated_clause_is_blocked(tmp_path: Path):
+    labs = _labs(tmp_path)
+    prompt = build_vlm_task_prompt(labs=labs, fusion_mode="open")
+    report = build_vlm_template_report(prompt)
+    report["evidence_concordance"] = "No ascites. This confirms a diagnosis of HCC."
+
+    validation = validate_vlm_report(report, fusion_mode="open", prompt=prompt)
+
+    assert validation["valid"] is False
+    assert "DIAGNOSTIC_ASSERTION" in {item["code"] for item in validation["errors"]}
+
+
 def test_soft_diagnostic_phrase_is_warning_not_blocked(tmp_path: Path):
     labs = _labs(tmp_path)
     prompt = build_vlm_task_prompt(labs=labs, fusion_mode="open")

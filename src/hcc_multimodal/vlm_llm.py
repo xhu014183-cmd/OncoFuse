@@ -32,7 +32,7 @@ from .deepseek import (
     SOFT_PATTERNS,
     _collect_number_tokens,
     _extract_json,
-    _negated,
+    _first_unnegated_pattern,
 )
 from .schemas import (
     PIPELINE_VERSION,
@@ -376,11 +376,7 @@ def validate_vlm_report(
     for code, patterns in BOUNDARY_PATTERNS.items():
         violation = None
         for line in narrative.splitlines():
-            for pattern in patterns:
-                match = pattern.search(line)
-                if match and not _negated(line, match.start()):
-                    violation = pattern
-                    break
+            violation = _first_unnegated_pattern(line, patterns)
             if violation:
                 break
         if violation:
@@ -391,12 +387,11 @@ def validate_vlm_report(
     soft_warnings: list[dict[str, str]] = []
     for code, patterns in SOFT_PATTERNS.items():
         for line in narrative.splitlines():
-            for pattern in patterns:
-                match = pattern.search(line)
-                if match and not _negated(line, match.start()):
-                    soft_warnings.append(
-                        {"code": code, "message": f"Soft pattern matched: {pattern.pattern}"}
-                    )
+            pattern = _first_unnegated_pattern(line, patterns)
+            if pattern is not None:
+                soft_warnings.append(
+                    {"code": code, "message": f"Soft pattern matched: {pattern.pattern}"}
+                )
 
     citations, unattributed = build_numeric_citations(report, prompt)
     allowed = _collect_number_tokens(_mask_iso_dates(prompt.prompt_text))

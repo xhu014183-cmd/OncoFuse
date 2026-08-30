@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.2.0",
+  "case_id": "CASE_PUBLIC_CT_SYNTHETIC_LABS_001",
+  "patient_id": "RESEARCH_001",
+  "clinical_task": "recurrence_surveillance",
+  "index_date": "2026-07-20",
+  "demographics": {
+    "age_years": 58,
+    "sex_at_birth": "male"
+  },
+  "clinical_context": {
+    "risk_factors": ["chronic_HBV", "cirrhosis"],
+    "known_diagnoses": ["previously_treated_HCC"],
+    "current_medications": ["entecavir"],
+    "treatment_events": [
+      {
+        "date": "2026-01-15",
+        "type": "TACE",
+        "description": "synthetic demonstration treatment anchor"
+      }
+    ],
+    "clinical_question": "演示影像定量、视觉观察与合成检验趋势如何形成受控报告"
+  },
+  "data_relationship": {
+    "imaging_origin": "real_public",
+    "laboratory_origin": "synthetic",
+    "pairing_status": "unpaired_poc_composite",
+    "statement": "公开影像与合成检验仅用于软件演示，不属于同一受试者"
+  },
+  "imaging": {
+    "source_type": "nifti",
+    "nifti_image": "../public-data/HCC_003/public-case/converted/hcc003_ct.nii.gz",
+    "dicom_dir": null,
+    "seg": "../public-data/HCC_003/public-case/converted/hcc003_tumor_mask.nii.gz",
+    "seg_role": "public_reference",
+    "study_date": "2026-07-20",
+    "phase": "portal_venous"
+  },
+  "laboratory": {
+    "source_type": "file",
+    "file_path": "lab_report.synthetic.txt"
+  },
+  "hpi": {
+    "source_type": "file",
+    "file_path": "hpi.synthetic.txt"
+  },
+  "output_dir": "../case-output-recommended"
+}

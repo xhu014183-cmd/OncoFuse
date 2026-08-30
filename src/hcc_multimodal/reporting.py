@@ -23,12 +23,21 @@ def _bullets(items: list[str], empty_text: str) -> str:
     return "\n".join(f"- {item}" for item in items)
 
 
-def render_human_markdown(report: dict[str, Any]) -> str:
+def render_human_markdown(
+    report: dict[str, Any], *, ai_narrative: str | None = None
+) -> str:
     """Render only a report that has already passed the blocking validator."""
     assessment = report["multimodal_assessment"]
     state = assessment["state"]
     state_label = STATE_LABELS.get(state, "结构化多模态证据结果")
     review = "是" if report.get("review_required") else "否"
+    narrative_section = (
+        "\n\n## AI辅助解读\n\n"
+        + ai_narrative.strip()
+        + "\n\n> 本段仅为语言辅助，正式证据和裁决以上述锁定字段为准。"
+        if ai_narrative
+        else ""
+    )
     return (
         "# HCC 多模态研究证据摘要\n\n"
         f"> 数据范围：{report['data_scope']}\n\n"
@@ -51,6 +60,7 @@ def render_human_markdown(report: dict[str, Any]) -> str:
         + _bullets(report.get("uncertainty") or [], "未记录额外不确定性")
         + "\n\n## 质量与使用边界\n\n"
         + _bullets(report.get("quality_and_limits") or [], "未记录额外限制")
+        + narrative_section
         + f"\n\n> {report['disclaimer']}\n\n"
         "<details>\n<summary>机器审计字段</summary>\n\n"
         f"- state: {state}\n"
@@ -61,8 +71,15 @@ def render_human_markdown(report: dict[str, Any]) -> str:
     )
 
 
-def write_human_markdown(report: dict[str, Any], path: str | Path) -> Path:
+def write_human_markdown(
+    report: dict[str, Any],
+    path: str | Path,
+    *,
+    ai_narrative: str | None = None,
+) -> Path:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_human_markdown(report), encoding="utf-8")
+    target.write_text(
+        render_human_markdown(report, ai_narrative=ai_narrative), encoding="utf-8"
+    )
     return target

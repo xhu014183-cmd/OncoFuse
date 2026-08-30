@@ -32,7 +32,9 @@ dev = [
 public-data = [
   "idc-index>=0.12,<1",
 ]
+# Reserved: OCR ingestion is not yet wired to a concrete dependency.
 ocr = []
+# The LLM client uses the standard library (urllib), so no extra dependency is needed.
 llm = []
 registration = [
   "SimpleITK>=2.3,<3",
@@ -41,6 +43,8 @@ imaging-ai = [
   "torch>=2.2,<3",
   "monai>=1.3,<2",
 ]
+# m3d is a superset of imaging-ai (adds transformers + safetensors) for M3D-LaMed
+# inference; kept separate to avoid pulling transformers into plain imaging-ai use.
 m3d = [
   "torch>=2.2,<3",
   "transformers>=4.40,<5",
@@ -64,7 +68,6 @@ testpaths = ["tests"]
 omit = [
   "*/multimodal_connector.py",
   "*/vlm_model.py",
-  "*/vlm_prompting.py",
   "*/vlm_skeleton_web.py",
   "*/vlm_training.py",
 ]

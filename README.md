@@ -79,6 +79,7 @@ Run the checks:
 
 | Capability | Command | Status |
 |---|---|---|
+| LiON-inspired single-phase CT report pipeline | `hcc-demo run-report` | ✅ case_input 1.2 / fail-closed |
 | Synthetic end-to-end demo | `hcc-demo run-demo` | ✅ stable |
 | Longitudinal NIfTI + mask analysis | `hcc-demo analyze` | ✅ stable |
 | DICOM CT + SEG conversion with geometry QC | `hcc-demo convert-dicom-seg` | ✅ stable |
@@ -89,9 +90,23 @@ Run the checks:
 | Locked multicenter validation workflow | `hcc-demo validate-research-cohort` … | ✅ research |
 | CPU patch-extraction browser demo | `hcc-demo vlm-skeleton-web` | ⚠️ **mock**, no model |
 | VLM task prompts (auditable / open) | `hcc-demo vlm-prompt` | ✅ dual-mode |
-| Dual-mode VLM live demo (real LLM + fail-closed audit) | `hcc-demo vlm-live` | ✅ fail-closed |
+| Dual-mode VLM prompt live demo (text LLM, optional `--image`; fail-closed audit) | `hcc-demo vlm-live` | ✅ fail-closed |
 | Local visualization service (upload imaging + labs → interpretation) | `hcc-demo vlm-web` | ✅ local |
 | Real 3D VLM inference (M3D-LaMed) | — | 🗺️ roadmap, see below |
+
+### LiON-inspired HCC report pipeline
+
+`run-report` is the recommended single-case entry point. A supplied SEG is converted into pixel-, lesion-, and patient-level quantitative evidence; optional GLM sees only rerendered deidentified PNGs; deterministic rules cross-check attribution and fuse standardized labs. `deepseek-r1-distill-qwen-32b` is routed to an optional number-free Chinese narrative that cannot alter the authoritative JSON; JSON-capable DeepSeek models may still use the controlled structured renderer.
+
+```powershell
+hcc-demo run-report `
+  --case-input examples\case_input.recommended.json `
+  --output case-output `
+  --glm-mode off `
+  --report-mode deterministic
+```
+
+External calls require explicit `live` modes. With `--require-live-models`, either provider failing or producing blocked output gives a non-zero exit while retaining audit artifacts. See the [implementation/runbook](docs/LION_INSPIRED_HCC_PIPELINE_PLAN.md) and [case input specification](docs/CASE_INPUT_SPEC.md).
 
 ## Architecture
 
@@ -328,6 +343,18 @@ cohort contract, directory boundaries, endpoint rules, and the explicit
 `--unlock-external` one-time flag.
 
 ### CPU three-line case pipeline (0.4.0)
+
+For patient-facing intake, use the unified case envelope described in
+[docs/CASE_INPUT_SPEC.md](docs/CASE_INPUT_SPEC.md). It distinguishes the
+clinical task, source data, optional context, and the report level permitted by
+the available evidence.
+
+```powershell
+.\.venv\Scripts\hcc-demo analyze-case --case-input examples\case_input.minimum.json
+```
+
+Replace the placeholder DICOM directory before running. The existing individual
+arguments remain available for development and backward compatibility.
 
 ```powershell
 python examples\generate_dicom_seg_fixture.py --output synthetic-case
