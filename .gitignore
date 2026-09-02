@@ -10,6 +10,8 @@ dist/
 build/
 demo-output/
 public-data/
+hcc-public-data/
+research-output/
 embedding-output/
 case-output/
 case-output-live-smoke-*/

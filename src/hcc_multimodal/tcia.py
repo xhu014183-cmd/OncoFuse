@@ -197,6 +197,8 @@ def convert_ct_and_mass_seg(
     ct_dir: str | Path,
     seg_path: str | Path,
     output_dir: str | Path,
+    *,
+    patient_id: str | None = None,
 ) -> tuple[Path, Path, Path]:
     """Convert one coherent CT acquisition and Mass SEG onto a complete NIfTI grid."""
     try:
@@ -237,25 +239,95 @@ def convert_ct_and_mass_seg(
         raise ValueError(
             "SEG pixel frame count does not match PerFrameFunctionalGroupsSequence"
         )
-    frames = [
+    mass_frames = [
         (index, frame, pixel_frames[index])
         for index, frame in enumerate(seg.PerFrameFunctionalGroupsSequence)
         if int(frame.SegmentIdentificationSequence[0].ReferencedSegmentNumber) == mass_number
     ]
-    if not frames:
+    if not mass_frames:
         raise ValueError("The DICOM SEG contains no frames for the Mass segment")
+    frames = [
+        (index, frame, mask_frame)
+        for index, frame, mask_frame in mass_frames
+        if np.any(mask_frame)
+    ]
+    if not frames:
+        raise ValueError("The DICOM SEG Mass segment contains no non-zero pixels")
+    ignored_empty_frame_count = len(mass_frames) - len(frames)
 
     referenced_counts: Counter[str] = Counter()
     for _, frame, _ in frames:
         for uid in _frame_source_uids(frame):
             if uid in ct_by_uid:
                 referenced_counts[_acquisition_id(ct_by_uid[uid])] += 1
-    if not referenced_counts:
-        raise ValueError("Mass SEG frames do not reference any supplied CT instances")
-    selected_acquisition = min(
-        referenced_counts,
-        key=lambda key: (-referenced_counts[key], key),
-    )
+    if referenced_counts:
+        selected_acquisition = min(
+            referenced_counts,
+            key=lambda key: (-referenced_counts[key], key),
+        )
+    else:
+        acquisition_datasets: dict[str, list[Any]] = {}
+        for dataset in ct_by_uid.values():
+            acquisition_datasets.setdefault(_acquisition_id(dataset), []).append(dataset)
+        positional_scores: dict[str, float] = {}
+        for acquisition_id, datasets in acquisition_datasets.items():
+            reference = datasets[0]
+            try:
+                candidate_orientation = _orientation(reference)
+            except ValueError:
+                continue
+            candidate_normal = np.cross(
+                candidate_orientation[:3], candidate_orientation[3:]
+            )
+            candidate_positions = np.asarray(
+                sorted(
+                    float(
+                        np.dot(
+                            np.asarray(dataset.ImagePositionPatient, dtype=float),
+                            candidate_normal,
+                        )
+                    )
+                    for dataset in datasets
+                ),
+                dtype=float,
+            )
+            if len(candidate_positions) > 1:
+                candidate_differences = np.diff(candidate_positions)
+                candidate_spacing = float(np.median(candidate_differences))
+                if candidate_spacing <= 0 or not np.allclose(
+                    candidate_differences,
+                    candidate_spacing,
+                    atol=max(1e-3, candidate_spacing * 0.01),
+                ):
+                    continue
+            else:
+                candidate_spacing = float(
+                    getattr(reference, "SpacingBetweenSlices", 0.0)
+                    or getattr(reference, "SliceThickness", 0.0)
+                )
+                if candidate_spacing <= 0:
+                    continue
+            frame_errors: list[float] = []
+            for _, frame, _ in frames:
+                frame_position = _frame_position(frame)
+                if frame_position is None:
+                    frame_errors = []
+                    break
+                projection = float(np.dot(frame_position, candidate_normal))
+                frame_errors.append(
+                    float(np.min(np.abs(candidate_positions - projection)))
+                )
+            if frame_errors and max(frame_errors) <= candidate_spacing / 2 + 1e-3:
+                positional_scores[acquisition_id] = max(frame_errors)
+        if not positional_scores:
+            raise ValueError(
+                "Non-zero Mass SEG frames neither reference nor geometrically align with "
+                "a complete supplied CT acquisition"
+            )
+        selected_acquisition = min(
+            positional_scores,
+            key=lambda key: (positional_scores[key], key),
+        )
     selected_datasets = [
         dataset for dataset in ct_by_uid.values() if _acquisition_id(dataset) == selected_acquisition
     ]
@@ -263,6 +335,21 @@ def convert_ct_and_mass_seg(
         raise ValueError(f"No CT instances found for selected {selected_acquisition}")
 
     first_unsorted = selected_datasets[0]
+    dicom_patient_ids = {
+        str(getattr(dataset, "PatientID", "")).strip()
+        for dataset in [*selected_datasets, seg]
+        if str(getattr(dataset, "PatientID", "")).strip()
+    }
+    if len(dicom_patient_ids) != 1:
+        raise ValueError(
+            "CT and SEG must contain one consistent non-empty DICOM PatientID"
+        )
+    dicom_patient_id = next(iter(dicom_patient_ids))
+    if patient_id is not None and patient_id != dicom_patient_id:
+        raise ValueError(
+            "Requested patient_id does not match the CT/SEG DICOM PatientID"
+        )
+    resolved_patient_id = patient_id or dicom_patient_id
     orientation = _orientation(first_unsorted)
     row_direction = orientation[:3]
     column_direction = orientation[3:]
@@ -373,14 +460,27 @@ def convert_ct_and_mass_seg(
     lps_to_ras = np.diag([-1.0, -1.0, 1.0, 1.0])
     ras_affine = lps_to_ras @ lps_affine
 
-    image_path = output / "hcc003_ct.nii.gz"
-    mask_path = output / "hcc003_tumor_mask.nii.gz"
+    output_stem = re.sub(r"[^a-z0-9]+", "", resolved_patient_id.lower())
+    if not output_stem:
+        raise ValueError("DICOM PatientID cannot be converted to a safe output filename")
+    image_path = output / f"{output_stem}_ct.nii.gz"
+    mask_path = output / f"{output_stem}_tumor_mask.nii.gz"
     attribution_path = output / "ATTRIBUTION.json"
     nib.save(nib.Nifti1Image(ct_volume, ras_affine), image_path)
     nib.save(nib.Nifti1Image(mask_volume, ras_affine), mask_path)
     ct_for = str(getattr(first, "FrameOfReferenceUID", "")) or None
     seg_for = str(getattr(seg, "FrameOfReferenceUID", "")) or None
     warnings: list[str] = []
+    if ignored_empty_frame_count:
+        warnings.append(
+            f"Ignored {ignored_empty_frame_count} empty Mass SEG frames during geometry "
+            "selection and mapping"
+        )
+    if not referenced_counts:
+        warnings.append(
+            "The non-zero Mass SEG frames had no matching per-frame SOP references; "
+            "the CT acquisition was selected by verified patient-space alignment"
+        )
     if len(referenced_counts) > 1:
         warnings.append(
             "The source SeriesInstanceUID contains multiple acquisitions; "
@@ -400,7 +500,8 @@ def convert_ct_and_mass_seg(
         "collection_doi": COLLECTION_DOI,
         "license": LICENSE_NAME,
         "license_url": LICENSE_URL,
-        "source_patient_id": SOURCE_PATIENT_ID,
+        "source_patient_id": resolved_patient_id,
+        "source_patient_id_validation": "consistent CT/SEG DICOM PatientID",
         "study_instance_uid": next(iter(study_uids)),
         "ct_series_instance_uid": next(iter(series_uids)),
         "seg_series_instance_uid": str(seg.SeriesInstanceUID),
@@ -549,7 +650,12 @@ def prepare_public_case(
         raise FileNotFoundError(
             f"IDC download completed without the expected series for {patient_id}"
         )
-    return convert_ct_and_mass_seg(ct_dir, _single_dicom(seg_dir), output / "converted")
+    return convert_ct_and_mass_seg(
+        ct_dir,
+        _single_dicom(seg_dir),
+        output / "converted",
+        patient_id=patient_id,
+    )
 
 
 LAB_SCENARIOS = {

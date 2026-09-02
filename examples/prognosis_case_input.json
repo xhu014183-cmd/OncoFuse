@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "case_id": "HCC_TACE_OS_EXAMPLE",
+  "patient_id": "RESEARCH_EXAMPLE_001",
+  "clinical_task": "tace_overall_survival_prognosis",
+  "imaging": {
+    "source_type": "nifti",
+    "nifti_image": "REPLACE_WITH_BASELINE_CT.nii.gz",
+    "seg": "REPLACE_WITH_PUBLIC_REFERENCE_SEG.nii.gz",
+    "seg_role": "public_reference",
+    "phase": "portal_venous",
+    "study_date": "unknown"
+  },
+  "clinical": {
+    "age_years": 65,
+    "sex": "male",
+    "afp_ng_ml": 100.0
+  },
+  "data_relationship": {
+    "imaging_origin": "real_public",
+    "laboratory_origin": "real_public",
+    "pairing_status": "same_subject",
+    "statement": "公开影像、SEG和基线临床字段来自同一去标识化受试者"
+  },
+  "output_dir": "../prognosis-output"
+}

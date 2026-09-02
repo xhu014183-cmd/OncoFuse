@@ -363,6 +363,32 @@
     </div>
   </section>
 
+  <details class="card" id="prognosis-research-card" style="margin-bottom:16px">
+    <summary style="padding:12px 16px;cursor:pointer;font-weight:700">
+      队列研究 / TACE 后总生存风险（独立研究合同）
+    </summary>
+    <div class="body">
+      <p class="mode-note">
+        新增链路使用 WAW-TACE 开发、HCC-TACE-Seg 锁定外部验证；比较临床、影像和融合的
+        惩罚 Cox 模型。GLM 仅解释重新渲染的 CT，DeepSeek 仅润色锁定报告，两者均不参与生存预测。
+      </p>
+      <div class="grid">
+        <div class="card"><h2>研究输入</h2><div class="body">
+          同一受试者的基线 CT、公开参考 SEG、年龄、性别和 AFP，以及冻结的 JSON 模型包。
+          结局字段会被接口拒绝。
+        </div></div>
+        <div class="card"><h2>研究输出</h2><div class="body">
+          相对风险指数、WAW 开发队列百分位和中位风险分层；不输出“还能活多久”。
+          结果永久显示回顾性研究与人工复核限制。
+        </div></div>
+      </div>
+      <details class="tech-details" style="margin-top:10px"><summary>接口与复现入口</summary>
+        <p><code>POST /api/prognosis</code>；命令行使用 <code>hcc-demo run-prognosis-report</code>。
+        完整下载、训练和外部验证命令见 README 与 <code>docs/HCC_PUBLIC_OS_PROTOCOL.md</code>。</p>
+      </details>
+    </div>
+  </details>
+
   <details class="static-demo" open>
     <summary>静态演示内容（影像/检验面板 · 双模式对比 · 模型报告）—— 点击收起</summary>
 

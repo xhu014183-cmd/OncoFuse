@@ -229,7 +229,10 @@ def normalize_case_imaging(
             raise FileNotFoundError(f"Segmentation file not found: {mask_path}")
         if mask_path is not None and not _is_nifti(mask_path):
             image_path, mask_path, _ = convert_ct_and_mass_seg(
-                directory, mask_path, normalized_dir
+                directory,
+                mask_path,
+                normalized_dir,
+                patient_id=case.patient_id,
             )
             image = cast(nib.Nifti1Image, nib.load(str(image_path)))
             details = {

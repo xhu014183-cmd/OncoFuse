@@ -173,7 +173,9 @@ def parse_imaging_study(
     if seg_path is not None:
         try:
             target = Path(output_dir) if output_dir else Path(tempfile.mkdtemp(prefix="hcc-imaging-"))
-            image_path, mask_path, _ = convert_ct_and_mass_seg(directory, seg_path, target)
+            image_path, mask_path, _ = convert_ct_and_mass_seg(
+                directory, seg_path, target, patient_id=patient_id
+            )
             measured = measure_nifti(image_path, mask_path, patient_id=patient_id, study_date=study_date, modality=modality, phase=resolved_phase, provider="dicom-seg")
             quantitative = [QuantitativeLesion(lesion_id=item.lesion_id, volume_ml=item.volume_ml, centroid_world_mm=item.centroid_world_mm, max_3d_extent_mm=item.max_3d_extent_mm, source="expert_seg") for item in measured.lesions]
             warnings.extend(measured.quality.warnings)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import nibabel as nib
@@ -147,9 +148,75 @@ def test_complete_ct_grid_and_flipped_seg_are_mapped_in_patient_space(tmp_path: 
     assert attribution["geometry_qc"]["ct_instances_in_target"] == 3
     assert attribution["geometry_qc"]["seg_frames_mapped"] == 2
     assert attribution["geometry_qc"]["max_seg_landmark_error_mm"] == 0
+    assert attribution["source_patient_id"] == "PHANTOM"
+    assert image_path.name == "phantom_ct.nii.gz"
+    assert mask_path.name == "phantom_tumor_mask.nii.gz"
+
+
+def test_requested_patient_id_must_match_dicom(tmp_path: Path):
+    ct_dir, seg_path = _write_phantom(tmp_path / "input")
+    with pytest.raises(ValueError, match="patient_id does not match"):
+        convert_ct_and_mass_seg(
+            ct_dir,
+            seg_path,
+            tmp_path / "converted",
+            patient_id="OTHER_PATIENT",
+        )
 
 
 def test_nonuniform_or_missing_ct_slice_is_rejected(tmp_path: Path):
     ct_dir, seg_path = _write_phantom(tmp_path / "input", positions=(0.0, 2.0, 5.0))
     with pytest.raises(ValueError, match="missing slices or non-uniform spacing"):
         convert_ct_and_mass_seg(ct_dir, seg_path, tmp_path / "converted")
+
+
+def test_empty_seg_frame_outside_ct_grid_is_ignored(tmp_path: Path):
+    ct_dir, seg_path = _write_phantom(tmp_path / "input")
+    seg = pydicom.dcmread(seg_path)
+    original_pixels = np.asarray(seg.pixel_array)
+    empty_frame = deepcopy(seg.PerFrameFunctionalGroupsSequence[-1])
+    empty_frame.PlanePositionSequence[0].ImagePositionPatient = [22, 26, 6.0]
+    del empty_frame.DerivationImageSequence
+    seg.PerFrameFunctionalGroupsSequence.append(empty_frame)
+    seg.NumberOfFrames = 3
+    seg.PixelData = np.concatenate(
+        [original_pixels, np.zeros((1, 4, 5), dtype=np.uint8)], axis=0
+    ).tobytes()
+    pydicom.dcmwrite(seg_path, seg, enforce_file_format=True)
+
+    _, mask_path, attribution_path = convert_ct_and_mass_seg(
+        ct_dir,
+        seg_path,
+        tmp_path / "converted",
+    )
+
+    mask = np.asarray(nib.load(mask_path).dataobj)
+    attribution = json.loads(attribution_path.read_text(encoding="utf-8"))
+    assert mask.sum() == 2
+    assert attribution["geometry_qc"]["seg_frames_mapped"] == 2
+    assert any(
+        "Ignored 1 empty Mass SEG frames" in warning
+        for warning in attribution["geometry_qc"]["warnings"]
+    )
+
+
+def test_nonzero_seg_frames_can_use_verified_positional_fallback(tmp_path: Path):
+    ct_dir, seg_path = _write_phantom(tmp_path / "input")
+    seg = pydicom.dcmread(seg_path)
+    for frame in seg.PerFrameFunctionalGroupsSequence:
+        del frame.DerivationImageSequence
+    pydicom.dcmwrite(seg_path, seg, enforce_file_format=True)
+
+    _, mask_path, attribution_path = convert_ct_and_mass_seg(
+        ct_dir,
+        seg_path,
+        tmp_path / "converted",
+    )
+
+    mask = np.asarray(nib.load(mask_path).dataobj)
+    attribution = json.loads(attribution_path.read_text(encoding="utf-8"))
+    assert mask.sum() == 2
+    assert any(
+        "selected by verified patient-space alignment" in warning
+        for warning in attribution["geometry_qc"]["warnings"]
+    )

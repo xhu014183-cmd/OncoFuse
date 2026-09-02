@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
@@ -26,6 +29,18 @@ from .imaging import compare_imaging, measure_nifti
 from .imaging_adapter import parse_imaging_study
 from .labs import load_lab_evidence
 from .preview import create_overlay_montage
+from .prognosis_data import build_prognosis_cohort, sync_prognosis_data
+from .prognosis_models import (
+    ControlledPrognosisReport,
+    CoxModelBundle,
+    PrognosticEvidence,
+    PublicPrognosisCohortArtifact,
+)
+from .prognosis_report import run_prognosis_report
+from .prognosis_survival import (
+    evaluate_external_prognosis,
+    train_prognosis_models,
+)
 from .prompting import build_report_prompt, write_prompt_bundle
 from .public_cohort import prepare_public_cohort
 from .registration import register_volumes
@@ -77,6 +92,8 @@ def _schema_models() -> dict[str, type[JsonModel]]:
     return {
         "clinical-verdict": ClinicalVerdict,
         "controlled-report": ControlledReport,
+        "controlled-prognosis-report": ControlledPrognosisReport,
+        "cox-model-bundle": CoxModelBundle,
         "glm-imaging-evidence": GlmImagingEvidence,
         "evaluation-cohort": EvaluationCohort,
         "image-embedding-evidence": ImageEmbeddingEvidence,
@@ -86,6 +103,8 @@ def _schema_models() -> dict[str, type[JsonModel]]:
         "longitudinal-imaging-evidence": LongitudinalImagingEvidence,
         "lion-inspired-imaging-evidence": LionInspiredImagingEvidence,
         "multimodal-case-evidence": MultimodalCaseEvidence,
+        "prognostic-evidence": PrognosticEvidence,
+        "public-prognosis-cohort": PublicPrognosisCohortArtifact,
         "research-protocol": ResearchProtocol,
         "research-cohort-manifest": ResearchCohortManifest,
         "cohort-validation-report": CohortValidationReport,
@@ -545,6 +564,54 @@ def main() -> None:
     )
     run_report.add_argument("--require-live-models", action="store_true")
     run_report.add_argument("--timeout", type=float, default=180.0)
+    sync_prognosis = subparsers.add_parser(
+        "sync-prognosis-data",
+        help="Synchronize licensed WAW-TACE or HCC-TACE-Seg prognosis research data",
+    )
+    sync_prognosis.add_argument(
+        "--dataset", choices=("waw-tace", "hcc-tace-seg"), required=True
+    )
+    sync_prognosis.add_argument(
+        "--tier", choices=("metadata", "pilot", "full"), required=True
+    )
+    sync_prognosis.add_argument("--data-root", required=True)
+    sync_prognosis.add_argument("--accept-license", action="store_true")
+    build_prognosis = subparsers.add_parser(
+        "build-prognosis-cohort",
+        help="Build physically separated baseline features and OS endpoints",
+    )
+    build_prognosis.add_argument("--data-root", required=True)
+    build_prognosis.add_argument("--output", required=True)
+    train_prognosis = subparsers.add_parser(
+        "train-prognosis-model",
+        help="Train frozen WAW-TACE penalized Cox model bundles",
+    )
+    train_prognosis.add_argument("--cohort", required=True)
+    train_prognosis.add_argument("--output", required=True)
+    train_prognosis.add_argument("--seed", type=int, default=1729)
+    train_prognosis.add_argument("--bootstrap-iterations", type=int, default=1000)
+    external_prognosis = subparsers.add_parser(
+        "evaluate-prognosis-model",
+        help="Open the locked HCC-TACE-Seg external test exactly once per output",
+    )
+    external_prognosis.add_argument("--cohort", required=True)
+    external_prognosis.add_argument("--models", required=True)
+    external_prognosis.add_argument("--output", required=True)
+    external_prognosis.add_argument("--unlock-external", action="store_true")
+    external_prognosis.add_argument("--seed", type=int, default=1729)
+    external_prognosis.add_argument("--bootstrap-iterations", type=int, default=1000)
+    run_prognosis = subparsers.add_parser(
+        "run-prognosis-report",
+        help="Run LiON-inspired/GLM/frozen-Cox/DeepSeek controlled prognosis reporting",
+    )
+    run_prognosis.add_argument("--case-input", required=True)
+    run_prognosis.add_argument("--model", required=True)
+    run_prognosis.add_argument("--output", default=None)
+    run_prognosis.add_argument("--glm-mode", choices=("off", "live"), default="off")
+    run_prognosis.add_argument(
+        "--report-mode", choices=("deterministic", "live"), default="deterministic"
+    )
+    run_prognosis.add_argument("--timeout", type=float, default=180.0)
     public = subparsers.add_parser(
         "run-public-demo",
         help="Download TCIA HCC_003, convert its Mass SEG to NIfTI, and run a composite demo",
@@ -989,6 +1056,70 @@ def main() -> None:
                     f"{result.output_dir}\n"
                 ),
             )
+    elif args.command == "sync-prognosis-data":
+        if (
+            os.name == "nt"
+            and sys.flags.utf8_mode == 0
+            and args.dataset == "hcc-tace-seg"
+            and args.tier in {"pilot", "full"}
+        ):
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-X",
+                    "utf8",
+                    "-m",
+                    "hcc_multimodal.cli",
+                    *sys.argv[1:],
+                ],
+                check=False,
+            )
+            raise SystemExit(completed.returncode)
+        manifest_path = sync_prognosis_data(
+            args.dataset,
+            tier=args.tier,
+            data_root=args.data_root,
+            accept_license=args.accept_license,
+        )
+        print(f"Wrote {manifest_path}")
+    elif args.command == "build-prognosis-cohort":
+        cohort_path = build_prognosis_cohort(args.data_root, args.output)
+        print(f"Wrote {cohort_path}")
+    elif args.command == "train-prognosis-model":
+        if args.bootstrap_iterations <= 0:
+            parser.error("--bootstrap-iterations must be positive")
+        validation_path = train_prognosis_models(
+            args.cohort,
+            args.output,
+            seed=args.seed,
+            bootstrap_iterations=args.bootstrap_iterations,
+        )
+        print(f"Wrote {validation_path}")
+    elif args.command == "evaluate-prognosis-model":
+        if args.bootstrap_iterations <= 0:
+            parser.error("--bootstrap-iterations must be positive")
+        external_path = evaluate_external_prognosis(
+            args.cohort,
+            args.models,
+            args.output,
+            unlock_external=args.unlock_external,
+            bootstrap_iterations=args.bootstrap_iterations,
+            seed=args.seed,
+        )
+        print(f"Wrote {external_path}")
+    elif args.command == "run-prognosis-report":
+        if args.timeout <= 0:
+            parser.error("--timeout must be positive")
+        prognosis_result = run_prognosis_report(
+            args.case_input,
+            args.model,
+            output_dir=args.output,
+            glm_mode=cast(Literal["off", "live"], args.glm_mode),
+            report_mode=cast(Literal["deterministic", "live"], args.report_mode),
+            timeout_seconds=args.timeout,
+        )
+        print(f"Wrote {prognosis_result.output_dir / 'controlled-prognosis-report.json'}")
+        print(f"Wrote {prognosis_result.output_dir / 'controlled-prognosis-report.md'}")
     elif args.command == "run-demo":
         verdict_path = run_demo(
             args.output,

@@ -19,6 +19,7 @@ from .clinical_labs import parse_laboratory_report
 from .galad import calculate_galad_from_values
 from .imaging import compare_imaging, measure_nifti
 from .preview import extract_axial_slice_previews, extract_lesion_zoom
+from .prognosis_report import run_prognosis_report
 from .report_pipeline import run_report_pipeline
 from .vlm_llm import imaging_metadata_text
 from .vlm_prompting import RESEARCH_DISCLAIMER
@@ -486,6 +487,7 @@ class _Handler(BaseHTTPRequestHandler):
                     "service": "vlm-web",
                     "version": SERVICE_VERSION,
                     "started_at": getattr(self.server, "generated_at", ""),
+                    "capabilities": ["interpretation", "hcc_tace_os_prognosis"],
                     "models": {
                         "zhipu": {
                             "configured": bool(os.environ.get("ZHIPU_API_KEY")),
@@ -526,7 +528,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_POST(self) -> None:
-        if urlparse(self.path).path != "/api/interpret":
+        path = urlparse(self.path).path
+        if path not in {"/api/interpret", "/api/prognosis"}:
             self.send_error(404)
             return
         try:
@@ -534,11 +537,139 @@ class _Handler(BaseHTTPRequestHandler):
             if length <= 0 or length > MAX_BODY_BYTES:
                 raise ValueError("Request body is empty or exceeds the size limit")
             request = json.loads(self.rfile.read(length).decode("utf-8"))
-            result = self._interpret(request)
+            result = (
+                self._prognosis(request)
+                if path == "/api/prognosis"
+                else self._interpret(request)
+            )
         except Exception as exc:  # noqa: BLE001 - any upload/run failure maps to a JSON 400
             self._send_json({"ok": False, "error": str(exc)}, status=400)
             return
         self._send_json(result, status=200)
+
+    def _prognosis(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Run the separate controlled prognosis contract over uploaded NIfTI+SEG."""
+        files = request.get("files") or {}
+        options = request.get("options") or {}
+        ct = files.get("ct")
+        mask = files.get("mask")
+        model = files.get("model")
+        if not ct or not mask or not model:
+            raise ValueError("ct, mask, and frozen model files are required")
+        for field in ("age_years", "sex", "afp_ng_ml"):
+            if options.get(field) in (None, ""):
+                raise ValueError(f"options.{field} is required")
+        glm_mode = str(options.get("glm_mode") or "off")
+        report_mode = str(options.get("report_mode") or "deterministic")
+        if glm_mode not in {"off", "live"}:
+            raise ValueError("glm_mode must be off or live")
+        if report_mode not in {"deterministic", "live"}:
+            raise ValueError("report_mode must be deterministic or live")
+        if (glm_mode == "live" or report_mode == "live") and not bool(
+            options.get("external_models_confirmed")
+        ):
+            raise ValueError(
+                "Confirm that only rerendered deidentified images may be uploaded before enabling live models"
+            )
+        workdir = Path(tempfile.mkdtemp(prefix="oncofuse-prognosis-web-"))
+        try:
+            ct_path = workdir / "ct.nii.gz"
+            mask_path = workdir / "mask.nii.gz"
+            model_path = workdir / "model.json"
+            ct_path.write_bytes(base64.b64decode(ct["data_b64"]))
+            mask_path.write_bytes(base64.b64decode(mask["data_b64"]))
+            model_payload = model.get("content")
+            if model_payload is not None:
+                model_path.write_text(str(model_payload), encoding="utf-8")
+            else:
+                model_path.write_bytes(base64.b64decode(model["data_b64"]))
+            if any(
+                path.stat().st_size > MAX_UPLOAD_BYTES
+                for path in (ct_path, mask_path, model_path)
+            ):
+                raise ValueError("Prognosis upload exceeds the size limit")
+            case_path = workdir / "prognosis-case.json"
+            output = workdir / "out"
+            case_payload = {
+                "schema_version": "1.0.0",
+                "case_id": str(options.get("case_id") or "WEB_PROGNOSIS_CASE"),
+                "patient_id": str(options.get("patient_label") or "WEB_RESEARCH_CASE"),
+                "clinical_task": "tace_overall_survival_prognosis",
+                "imaging": {
+                    "source_type": "nifti",
+                    "nifti_image": str(ct_path),
+                    "seg": str(mask_path),
+                    "seg_role": str(options.get("seg_role") or "user_supplied"),
+                    "phase": str(options.get("phase") or "unknown"),
+                    "study_date": str(options.get("study_date") or "unknown"),
+                },
+                "clinical": {
+                    "age_years": float(options["age_years"]),
+                    "sex": str(options["sex"]).casefold(),
+                    "afp_ng_ml": float(options["afp_ng_ml"]),
+                    **{
+                        field: float(options[field])
+                        for field in (
+                            "albumin_g_dl",
+                            "bilirubin_mg_dl",
+                            "inr",
+                            "alt_iu_l",
+                            "creatinine_mg_dl",
+                        )
+                        if options.get(field) not in (None, "")
+                    },
+                },
+                "data_relationship": {
+                    "imaging_origin": str(
+                        options.get("imaging_origin") or "user_supplied"
+                    ),
+                    "laboratory_origin": str(
+                        options.get("laboratory_origin") or "user_supplied"
+                    ),
+                    "pairing_status": "same_subject",
+                    "statement": str(
+                        options.get("data_relationship")
+                        or "Web uploader declares imaging and clinical evidence belong to the same subject"
+                    ),
+                },
+                "output_dir": str(output),
+            }
+            case_path.write_text(
+                json.dumps(case_payload, ensure_ascii=False), encoding="utf-8"
+            )
+            result = run_prognosis_report(
+                case_path,
+                model_path,
+                output_dir=output,
+                glm_mode=cast(Literal["off", "live"], glm_mode),
+                report_mode=cast(Literal["deterministic", "live"], report_mode),
+                timeout_seconds=float(options.get("timeout_seconds") or 120.0),
+            )
+            artifact_names = (
+                "case-input.normalized.json",
+                "lion-inspired-evidence.json",
+                "glm-imaging-evidence.json",
+                "prognostic-evidence.json",
+                "controlled-prognosis-report.json",
+                "controlled-prognosis-report.md",
+                "deepseek-prompt.json",
+                "deepseek-narrative.json",
+                "pipeline-audit.json",
+                "provider-audit/glm.json",
+                "provider-audit/deepseek.json",
+            )
+            return {
+                "ok": True,
+                "report": result.report.to_dict(),
+                "prognostic_evidence": result.evidence.to_dict(),
+                "degraded": result.degraded,
+                "artifact_index": {
+                    name: {"available": (output / name).is_file()}
+                    for name in artifact_names
+                },
+            }
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
 
     def _interpret(self, request: dict[str, Any]) -> dict[str, Any]:
         files = request.get("files") or {}

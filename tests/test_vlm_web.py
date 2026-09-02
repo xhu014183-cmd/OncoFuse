@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from hcc_multimodal.clinical_labs import parse_laboratory_report
+from hcc_multimodal.prognosis_models import CoxModelBundle
 from hcc_multimodal.vlm_web import (
     _clinical_report,
     _deterministic_impression,
@@ -330,6 +331,49 @@ def _handler() -> "_Handler":
     return _Handler.__new__(_Handler)
 
 
+def _web_prognosis_model() -> CoxModelBundle:
+    names = [
+        "age_years",
+        "female",
+        "afp_ng_ml",
+        "lesion_count",
+        "total_tumor_volume_ml",
+        "max_lesion_extent_mm",
+        "largest_lesion_sphericity",
+    ]
+    return CoxModelBundle(
+        model_id="web-test-fused-v1",
+        model_name="fused_core",
+        feature_names=names,
+        transformations={
+            name: "log1p"
+            if name
+            in {
+                "afp_ng_ml",
+                "lesion_count",
+                "total_tumor_volume_ml",
+                "max_lesion_extent_mm",
+            }
+            else "identity"
+            for name in names
+        },
+        means=[60, 0.5, 4, 1, 2, 3, 0.7],
+        scales=[10, 0.5, 2, 1, 2, 1, 0.1],
+        coefficients=[0.1] * 7,
+        penalizer=0.1,
+        baseline_event_times_days=[365],
+        baseline_cumulative_hazard=[0.2],
+        development_reference_risks=[-1, 0, 1],
+        median_risk_threshold=0,
+        training_n=233,
+        training_event_n=168,
+        cross_validation_seed=1729,
+        model_hash="c" * 64,
+        external_validation_status="evaluated",
+        limitations=["research only"],
+    )
+
+
 def _disable_llm(monkeypatch) -> None:
     def unavailable(*_args, **_kwargs):
         raise RuntimeError("External LLM configuration is unavailable")
@@ -362,6 +406,31 @@ def test_interpret_single_timepoint(tmp_path: Path, monkeypatch):
     assert interp["risk_tier"]["level"] in {"low", "medium", "high"}
     assert interp["slices"]
     assert result["web_demo"]["arms"]["auditable"]["audit_status"] == "pass"
+
+
+def test_prognosis_endpoint_uses_separate_contract(tmp_path: Path):
+    from hcc_multimodal.synthetic import generate_synthetic_case
+
+    paths = generate_synthetic_case(tmp_path / "case")
+    request = {
+        "files": {
+            "ct": {"data_b64": _b64(paths["followup_image"])},
+            "mask": {"data_b64": _b64(paths["followup_mask"])},
+            "model": {"content": _web_prognosis_model().to_json()},
+        },
+        "options": {
+            "age_years": 60,
+            "sex": "male",
+            "afp_ng_ml": 80,
+            "phase": "portal_venous",
+            "study_date": "2026-07-15",
+        },
+    }
+    result = _handler()._prognosis(request)
+    assert result["ok"] is True
+    assert result["report"]["report_type"] == "hcc_tace_os_research_prognosis"
+    assert result["prognostic_evidence"]["external_validation_status"] == "evaluated"
+    assert result["artifact_index"]["controlled-prognosis-report.json"]["available"] is True
 
 
 def test_interpret_longitudinal_mode(tmp_path: Path, monkeypatch):

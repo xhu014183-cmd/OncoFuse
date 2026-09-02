@@ -342,6 +342,52 @@ See [docs/RESEARCH_EVALUATION.md](docs/RESEARCH_EVALUATION.md) and
 cohort contract, directory boundaries, endpoint rules, and the explicit
 `--unlock-external` one-time flag.
 
+### Public HCC overall-survival research track
+
+The baseline prognosis workflow is separate from the longitudinal demonstration.
+WAW-TACE is development-only; HCC-TACE-Seg is a locked external test. See the
+[prespecified protocol](docs/HCC_PUBLIC_OS_PROTOCOL.md),
+[data card](docs/HCC_PUBLIC_OS_DATA_CARD.md), and
+[bilingual model card](docs/HCC_PUBLIC_OS_MODEL_CARD.md),
+[English research summary](docs/HCC_PUBLIC_OS_RESEARCH_SUMMARY.en.md), and
+[clean-directory reproduction commands](docs/HCC_PUBLIC_OS_REPRODUCIBILITY.md).
+
+```powershell
+pip install -e ".[dev,public-data,research]"
+
+hcc-demo sync-prognosis-data --dataset waw-tace `
+  --tier metadata --data-root E:\hcc-public-data --accept-license
+hcc-demo sync-prognosis-data --dataset hcc-tace-seg `
+  --tier pilot --data-root E:\hcc-public-data --accept-license
+
+hcc-demo build-prognosis-cohort `
+  --data-root E:\hcc-public-data --output research-output\cohort
+hcc-demo train-prognosis-model `
+  --cohort research-output\cohort\development-cohort.json `
+  --output research-output\models
+hcc-demo evaluate-prognosis-model `
+  --cohort research-output\cohort\external-test-cohort.json `
+  --models research-output\models `
+  --output research-output\external --unlock-external
+```
+
+The primary model uses age, sex, AFP and harmonized reference-SEG morphology. GLM is
+image-only explanation and DeepSeek is optional controlled language editing; neither
+is used to fit survival risk. Features and outcomes are stored in separate CSV files;
+training and external evaluation also require physically separate cohort artifacts.
+
+Single-case research reporting uses a frozen model bundle:
+
+```powershell
+hcc-demo run-prognosis-report `
+  --case-input examples\prognosis_case_input.json `
+  --model research-output\models\model-bundle-fused.json `
+  --glm-mode off --report-mode deterministic
+```
+
+The Web service exposes the same separate contract at `POST /api/prognosis`; the
+existing `/api/interpret` behavior is unchanged.
+
 ### CPU three-line case pipeline (0.4.0)
 
 For patient-facing intake, use the unified case envelope described in

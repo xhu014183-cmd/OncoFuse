@@ -41,11 +41,57 @@ def _seg_series_by_patient(
     return rows
 
 
+def _prepare_with_local_ct_fallback(
+    patient_dir: Path,
+    *,
+    patient_id: str,
+    seg_series_uid: str,
+) -> tuple[tuple[Path, Path, Path], list[str]]:
+    """Prepare a SEG with its reference CT, then strictly try local CT series.
+
+    Some public SEG objects contain an incorrect referenced-series UID even
+    though the matching CT series has already been downloaded for another SEG
+    from the same patient.  The fallback never downloads an unreferenced CT and
+    does not relax conversion QC: every local candidate must still pass the
+    patient-space geometry checks in ``convert_ct_and_mass_seg``.
+    """
+    errors: list[str] = []
+    try:
+        prepared = prepare_public_case(
+            patient_dir,
+            patient_id=patient_id,
+            seg_series_uid=seg_series_uid,
+        )
+        return prepared, errors
+    except Exception as exc:  # noqa: BLE001 - retain the candidate failure audit
+        errors.append(f"referenced CT: {exc}")
+
+    raw_patient_dir = patient_dir / "raw" / patient_id
+    local_ct_uids = sorted(
+        path.name.removeprefix("CT_")
+        for path in raw_patient_dir.glob("CT_*")
+        if path.is_dir() and path.name.removeprefix("CT_")
+    )
+    for ct_series_uid in local_ct_uids:
+        try:
+            prepared = prepare_public_case(
+                patient_dir,
+                patient_id=patient_id,
+                seg_series_uid=seg_series_uid,
+                ct_series_uid=ct_series_uid,
+            )
+            return prepared, errors
+        except Exception as exc:  # noqa: BLE001 - try the next local CT candidate
+            errors.append(f"local CT {ct_series_uid[:24]}...: {exc}")
+    raise RuntimeError("; ".join(errors))
+
+
 def prepare_public_cohort(
     patient_ids: list[str],
     *,
     candidates_path: str | Path,
     output_dir: str | Path,
+    minimum_lesion_volume_ml: float = 1.0,
 ) -> Path:
     """Prepare public cases: download CT+SEG, convert, measure, and overlay.
 
@@ -55,8 +101,20 @@ def prepare_public_cohort(
     after interruptions. Returns the cohort manifest path.
     """
     output = Path(output_dir)
+    if minimum_lesion_volume_ml <= 0:
+        raise ValueError("minimum_lesion_volume_ml must be positive")
     output.mkdir(parents=True, exist_ok=True)
     candidates = _load_candidates(candidates_path)
+    manifest_path = output / "cohort_manifest.json"
+    previous: list[dict[str, Any]] = []
+    if manifest_path.exists():
+        try:
+            previous = json.loads(
+                manifest_path.read_text(encoding="utf-8")
+            ).get("patients", [])
+        except (ValueError, TypeError, OSError):
+            previous = []
+    previous_by_patient = {item["patient_id"]: item for item in previous}
     results: list[dict[str, Any]] = []
     for patient_id in patient_ids:
         seg_rows = _seg_series_by_patient(candidates, patient_id)
@@ -79,10 +137,28 @@ def prepare_public_cohort(
                 already_prepared = int(existing.get("lesion_count") or 0) > 0
             except (ValueError, TypeError, OSError):
                 already_prepared = False
+        attribution_path = converted_dir / "ATTRIBUTION.json"
+        if already_prepared:
+            try:
+                existing_attribution = json.loads(
+                    attribution_path.read_text(encoding="utf-8")
+                )
+                already_prepared = (
+                    existing_attribution.get("source_patient_id") == patient_id
+                    and float(
+                        previous_by_patient.get(patient_id, {}).get(
+                            "minimum_lesion_volume_ml", -1.0
+                        )
+                    )
+                    == minimum_lesion_volume_ml
+                )
+            except (ValueError, TypeError, OSError):
+                already_prepared = False
         if already_prepared:
             existing = json.loads(evidence_path.read_text(encoding="utf-8"))
+            image_files = sorted(converted_dir.glob("*_ct.nii.gz"))
+            mask_files = sorted(converted_dir.glob("*_tumor_mask.nii.gz"))
             attribution: dict[str, Any] | None = None
-            attribution_path = patient_dir / "converted" / "ATTRIBUTION.json"
             if attribution_path.exists():
                 try:
                     attribution = json.loads(attribution_path.read_text(encoding="utf-8"))
@@ -93,6 +169,8 @@ def prepare_public_cohort(
                     "patient_id": patient_id,
                     "status": "already_prepared",
                     "evidence_file": str(evidence_path),
+                    "image_file": str(image_files[0]) if len(image_files) == 1 else None,
+                    "mask_file": str(mask_files[0]) if len(mask_files) == 1 else None,
                     "overlay_file": str(
                         patient_dir / "converted" / f"{patient_id}_overlay.png"
                     ),
@@ -100,6 +178,7 @@ def prepare_public_cohort(
                     "total_tumor_volume_ml": existing.get("total_tumor_volume_ml"),
                     "max_lesion_extent_mm": existing.get("max_lesion_extent_mm"),
                     "quality_status": existing.get("quality", {}).get("status"),
+                    "minimum_lesion_volume_ml": minimum_lesion_volume_ml,
                     "study_date": existing.get("study_date"),
                     "seg_series_uid": (attribution or {}).get(
                         "seg_series_instance_uid"
@@ -112,7 +191,10 @@ def prepare_public_cohort(
         errors: list[str] = []
         for seg_row in seg_rows:
             try:
-                image_path, mask_path, attribution_path = prepare_public_case(
+                (
+                    (image_path, mask_path, attribution_path),
+                    preparation_warnings,
+                ) = _prepare_with_local_ct_fallback(
                     patient_dir,
                     patient_id=patient_id,
                     seg_series_uid=seg_row["seg_series_uid"],
@@ -123,6 +205,10 @@ def prepare_public_cohort(
                     f"({seg_row.get('study_date')}): {exc}"
                 )
                 continue
+            errors.extend(
+                f"seg {seg_row['seg_series_uid'][:24]}... {warning}"
+                for warning in preparation_warnings
+            )
             attribution = json.loads(attribution_path.read_text(encoding="utf-8"))
             try:
                 imaging = measure_nifti(
@@ -134,7 +220,7 @@ def prepare_public_cohort(
                     phase=str(attribution.get("phase", "unknown")),
                     provider="TCIA-HCC-TACE-Seg-DICOM-SEG",
                     inference_mode="public_expert_annotation",
-                    minimum_lesion_volume_ml=1.0,
+                    minimum_lesion_volume_ml=minimum_lesion_volume_ml,
                     frame_of_reference_uid=attribution.get("ct_frame_of_reference_uid"),
                     study_instance_uid=attribution.get("study_instance_uid"),
                     series_instance_uid=attribution.get("ct_series_instance_uid"),
@@ -178,6 +264,7 @@ def prepare_public_cohort(
                 "total_tumor_volume_ml": imaging.total_tumor_volume_ml,
                 "max_lesion_extent_mm": imaging.max_lesion_extent_mm,
                 "quality_status": imaging.quality.status,
+                "minimum_lesion_volume_ml": minimum_lesion_volume_ml,
                 "geometry_warnings": attribution.get("geometry_qc", {}).get(
                     "warnings", []
                 ),
@@ -195,15 +282,6 @@ def prepare_public_cohort(
         else:
             results.append(prepared)
 
-    manifest_path = output / "cohort_manifest.json"
-    previous: list[dict[str, Any]] = []
-    if manifest_path.exists():
-        try:
-            previous = json.loads(
-                manifest_path.read_text(encoding="utf-8")
-            ).get("patients", [])
-        except (ValueError, TypeError, OSError):
-            previous = []
     merged: dict[str, dict[str, Any]] = {
         item["patient_id"]: item for item in previous
     }
@@ -214,6 +292,7 @@ def prepare_public_cohort(
         "schema_version": SCHEMA_VERSION,
         "pipeline_version": PIPELINE_VERSION,
         "generated_at": datetime.now(UTC).isoformat(),
+        "minimum_lesion_volume_ml": minimum_lesion_volume_ml,
         "patients": final_patients,
         "ok_count": sum(1 for item in final_patients if item.get("status") == "ok"),
         "already_prepared_count": sum(

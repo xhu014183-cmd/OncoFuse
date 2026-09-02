@@ -48,11 +48,18 @@ UID mismatch remains a warning.
 The resulting mask is an expert-provided collection annotation, not a
 prediction made by this repository.
 
-## Composite-case warning
+## Clinical table and composite-case warning
 
-HCC-TACE-Seg does not provide AFP or DCP values for this subject. The public
-demo therefore combines the real public imaging with explicitly synthetic
-marker values under patient ID COMPOSITE_PUBLIC_HCC_003.
+The collection clinical table contains same-subject baseline AFP for all 105
+subjects (HCC_003: 1555.2 ng/mL), overall survival, death/censoring, age, sex,
+and staging/context fields. It does **not** contain DCP/PIVKA-II, AFP-L3%, or a
+complete raw liver-function panel. The prognosis research track uses the
+paired AFP and keeps outcomes in a physically separate evaluation file.
+
+The older public software demo still combines the image with explicitly
+synthetic longitudinal AFP/DCP scenarios under patient ID
+COMPOSITE_PUBLIC_HCC_003, because the collection has no longitudinal DCP
+series matching that demonstration.
 
 Those marker values are not linked to, measured from, or representative of the
 TCIA subject. The result demonstrates a software contract only; it is not
