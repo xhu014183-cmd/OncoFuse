@@ -1,0 +1,132 @@
+{
+  "$defs": {
+    "ClinicalContextItem": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "laboratory",
+            "treatment",
+            "hpi",
+            "quality"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "observed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Observed At"
+        },
+        "source_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Ref"
+        },
+        "statement": {
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "observed_at",
+        "category",
+        "statement"
+      ],
+      "title": "ClinicalContextItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "clinical_context": {
+      "items": {
+        "$ref": "#/$defs/ClinicalContextItem"
+      },
+      "title": "Clinical Context",
+      "type": "array"
+    },
+    "fusion_mode": {
+      "default": "auditable",
+      "enum": [
+        "auditable",
+        "open"
+      ],
+      "title": "Fusion Mode",
+      "type": "string"
+    },
+    "lab_context_injected": {
+      "default": false,
+      "title": "Lab Context Injected",
+      "type": "boolean"
+    },
+    "locked_constraints": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Locked Constraints",
+      "type": "array"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    },
+    "output_fields": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Output Fields",
+      "type": "array"
+    },
+    "prompt_text": {
+      "title": "Prompt Text",
+      "type": "string"
+    },
+    "task_name": {
+      "const": "image_conditioned_structured_research_summary",
+      "title": "Task Name",
+      "type": "string"
+    },
+    "task_version": {
+      "title": "Task Version",
+      "type": "string"
+    },
+    "visual_token_count": {
+      "maximum": 64,
+      "minimum": 8,
+      "title": "Visual Token Count",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "task_version",
+    "task_name",
+    "visual_token_count",
+    "prompt_text",
+    "clinical_context",
+    "output_fields",
+    "locked_constraints",
+    "metadata"
+  ],
+  "title": "VlmTaskPrompt",
+  "type": "object"
+}

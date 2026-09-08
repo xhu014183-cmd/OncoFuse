@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hcc-multimodal-demo.local/schemas/case_input.schema.json",
   "title": "HCCMultimodalCaseInput",
-  "description": "Unified input envelope for the HCC multimodal three-line case pipeline. Designed to map 1:1 to existing CLI arguments with minimal code changes.",
+  "description": "Patient-level intake envelope for the HCC multimodal case pipeline. Version 1.2 adds DICOM/NIfTI source selection and an explicit data-relationship contract while retaining 1.0/1.1 compatibility.",
   "type": "object",
   "required": ["schema_version", "case_id", "patient_id", "imaging", "laboratory"],
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "1.0.0"
+      "enum": ["1.0.0", "1.1.0", "1.2.0"]
     },
     "case_id": {
       "type": "string",
@@ -18,26 +18,106 @@
       "type": "string",
       "description": "Research pseudonym. Must match DICOM PatientID when DICOM is supplied."
     },
+    "clinical_task": {
+      "type": "string",
+      "enum": ["screening", "diagnostic_workup", "treatment_baseline", "post_treatment_response", "recurrence_surveillance", "unspecified"],
+      "description": "The question this case is intended to answer. Required in schema 1.1.0; use unspecified only when the task is genuinely unknown."
+    },
+    "demographics": {
+      "type": "object",
+      "properties": {
+        "age_years": { "type": ["number", "null"], "exclusiveMinimum": 0, "exclusiveMaximum": 150 },
+        "sex_at_birth": { "type": ["string", "null"], "enum": ["male", "female", "unknown", null] }
+      },
+      "additionalProperties": false
+    },
+    "clinical_context": {
+      "type": "object",
+      "properties": {
+        "risk_factors": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "known_diagnoses": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "current_medications": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "treatment_events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["date", "type"],
+            "properties": {
+              "date": { "type": "string", "format": "date" },
+              "type": { "type": "string" },
+              "description": { "type": ["string", "null"] }
+            },
+            "additionalProperties": false
+          }
+        },
+        "clinical_question": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
     "index_date": {
       "type": "string",
       "format": "date",
       "description": "ISO-8601 decision/index date. Defaults to imaging study_date when omitted."
     },
-    "imaging": {
+    "data_relationship": {
       "type": "object",
-      "required": ["dicom_dir"],
+      "required": ["imaging_origin", "laboratory_origin", "pairing_status", "statement"],
       "properties": {
-        "dicom_dir": {
+        "imaging_origin": {
           "type": "string",
+          "enum": ["real_clinical", "real_public", "synthetic", "user_supplied", "unknown"]
+        },
+        "laboratory_origin": {
+          "type": "string",
+          "enum": ["real_clinical", "real_public", "synthetic", "user_supplied", "unknown"]
+        },
+        "pairing_status": {
+          "type": "string",
+          "enum": ["same_subject", "unpaired_poc_composite", "user_supplied_unverified"]
+        },
+        "statement": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+        "imaging": {
+            "type": "object",
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": ["dicom", "nifti"],
+          "description": "Required in schema 1.2.0. Older schemas imply dicom."
+        },
+        "modality": {
+          "type": "string",
+          "enum": ["CT", "MR"],
+          "default": "CT"
+        },
+        "dicom_dir": {
+          "type": ["string", "null"],
           "description": "Path to directory containing CT/MR DICOM series."
+        },
+        "nifti_image": {
+          "type": ["string", "null"],
+          "description": "Single deidentified 3D CT NIfTI image; mutually exclusive with dicom_dir."
         },
         "seg": {
           "type": ["string", "null"],
           "description": "Optional path to DICOM SEG or NIfTI segmentation mask."
         },
+        "seg_role": {
+          "type": ["string", "null"],
+          "enum": ["expert_reference", "public_reference", "user_supplied", "model_prediction", null],
+          "description": "Required when seg is supplied in schema 1.2.0."
+        },
         "phase": {
           "type": ["string", "null"],
-          "description": "Optional phase hint: arterial, portal_venous, delayed, unknown."
+          "enum": ["arterial", "portal_venous", "delayed", "non_contrast", "noncontrast", "unknown", null],
+          "description": "Acquisition phase hint. This is not a substitute for DICOM metadata or radiologist review."
+        },
+        "study_date": {
+          "type": ["string", "null"],
+          "format": "date",
+          "description": "Required for NIfTI when index_date is not the image acquisition date."
         },
         "image_evidence": {
           "type": ["string", "object", "null"],
@@ -124,12 +204,47 @@
     },
     "llm_response": {
       "type": ["string", "object", "null"],
-      "description": "Optional offline LLM rewrite JSON to validate against the deterministic summary."
+      "description": "Internal/offline validation fixture, not patient input. Retained for backward compatibility."
     },
     "output_dir": {
       "type": "string",
       "description": "Directory for pipeline artifacts. Equivalent to --output."
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "schema_version": { "enum": ["1.1.0", "1.2.0"] } } },
+      "then": { "required": ["clinical_task"] }
+    },
+    {
+      "if": { "properties": { "schema_version": { "const": "1.2.0" } } },
+      "then": {
+        "required": ["data_relationship"],
+        "properties": {
+          "imaging": {
+            "required": ["source_type"],
+            "oneOf": [
+              {
+                "properties": {
+                  "source_type": { "const": "dicom" },
+                  "dicom_dir": { "type": "string" },
+                  "nifti_image": { "type": "null" }
+                },
+                "required": ["dicom_dir"]
+              },
+              {
+                "properties": {
+                  "source_type": { "const": "nifti" },
+                  "dicom_dir": { "type": "null" },
+                  "nifti_image": { "type": "string" }
+                },
+                "required": ["nifti_image"]
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
   "additionalProperties": false
 }

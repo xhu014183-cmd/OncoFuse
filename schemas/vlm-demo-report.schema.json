@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "VlmNumericCitation": {
+      "additionalProperties": false,
+      "description": "Deterministic per-number attribution attached at the extraction layer.\n\nThe VLM writes evidence IDs (``[LAB_001]``) into its free text; the audit\npipeline resolves every numeric token back to a supplied laboratory\nobservation and records the anchor here. This is the extraction-layer\nsource reference that makes diff highlighting attributable.",
+      "properties": {
+        "analyte": {
+          "title": "Analyte",
+          "type": "string"
+        },
+        "comparator": {
+          "default": "eq",
+          "enum": [
+            "eq",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ],
+          "title": "Comparator",
+          "type": "string"
+        },
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "observed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed At"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "used_in": {
+          "title": "Used In",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "analyte",
+        "value",
+        "unit",
+        "used_in"
+      ],
+      "title": "VlmNumericCitation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Structured extraction target shared by both dual-mode VLM arms.\n\n``numeric_citations`` is populated by the deterministic audit after model\nvalidation; the model itself only fills the free-text fields.",
+  "properties": {
+    "clinical_context_summary": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Clinical Context Summary",
+      "type": "array"
+    },
+    "evidence_concordance": {
+      "title": "Evidence Concordance",
+      "type": "string"
+    },
+    "fusion_mode": {
+      "enum": [
+        "auditable",
+        "open"
+      ],
+      "title": "Fusion Mode",
+      "type": "string"
+    },
+    "image_conditioning_statement": {
+      "title": "Image Conditioning Statement",
+      "type": "string"
+    },
+    "imaging_observations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Imaging Observations",
+      "type": "array"
+    },
+    "missing_information": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Information",
+      "type": "array"
+    },
+    "numeric_citations": {
+      "items": {
+        "$ref": "#/$defs/VlmNumericCitation"
+      },
+      "title": "Numeric Citations",
+      "type": "array"
+    },
+    "research_disclaimer": {
+      "const": "Research evidence summary only; not for diagnosis, staging, prognosis, or treatment decisions.",
+      "title": "Research Disclaimer",
+      "type": "string"
+    },
+    "uncertainties": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Uncertainties",
+      "type": "array"
+    }
+  },
+  "required": [
+    "fusion_mode",
+    "imaging_observations",
+    "clinical_context_summary",
+    "evidence_concordance",
+    "uncertainties",
+    "missing_information",
+    "image_conditioning_statement",
+    "research_disclaimer"
+  ],
+  "title": "VlmDemoReport",
+  "type": "object"
+}

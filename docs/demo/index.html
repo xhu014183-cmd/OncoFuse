@@ -231,6 +231,36 @@
   .tech-details summary {
     cursor: pointer; font-size: 12.5px; color: var(--accent); user-select: none;
   }
+
+  /* ===== Dual-mode comparison ===== */
+  details.static-demo {
+    margin-top: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+  }
+  details.static-demo summary {
+    cursor: pointer;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--muted);
+    user-select: none;
+  }
+  details.static-demo[open] summary {
+    border-bottom: 1px solid var(--border);
+    color: var(--accent);
+  }
+  .badge.green { color: var(--ok); border-color: rgba(63,185,80,.45); }
+  .mode-note { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+  .mode-note code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; }
+  .dual-head { margin-top: 22px; margin-bottom: 12px; }
+  .dual-head h2 { font-size: 15px; margin: 0 0 4px; }
+  .dual-head .sub { font-size: 12px; color: var(--muted); }
+  .diff-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+  .diff-open { background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.45); border-radius: 6px; padding: 2px 6px; color: #ffa198; }
+  .diff-audit { background: rgba(63,185,80,.10); border: 1px solid rgba(63,185,80,.4); border-radius: 6px; padding: 2px 6px; color: #7ee787; }
+  ul.ev li.diff-open { margin-left: -8px; }
+  ul.ev li.diff-audit { margin-left: -8px; }
 </style>
 </head>
 <body>
@@ -242,12 +272,125 @@
       <div class="sub">视觉-语言模型 · 影像分割证据 × 检验科肿瘤标志物 · 纵向随访融合裁决</div>
     </div>
     <div class="badges">
-      <span class="badge blue">患者 DEMO_HCC_001</span>
-      <span class="badge blue">CT · 肝脏</span>
+      <span class="badge blue" id="vlm-web-version">vlm-web（文件模式）</span>
       <span class="badge amber">schema v0.1.0</span>
       <span class="badge red">研究演示 · 非诊断用途</span>
     </div>
   </header>
+
+  <!-- ============ 输入影像与检验 · 获取解读 ============ -->
+  <section class="card" id="interpret-card">
+    <h2><span class="dot" style="background:var(--accent)"></span>输入影像与检验 · 获取解读<span class="badge green" style="margin-left:auto">auditable 主链路</span></h2>
+    <div class="body">
+      <p class="mode-note">
+        上传 <b>CT（.nii.gz）</b> + <b>可选肿瘤 mask（.nii.gz）</b> + <b>检验报告（.txt）</b>，
+        按 LiON-inspired → GLM → 交叉检查 → 检验融合 → 受控报告链路生成解读。
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <label class="badge blue" style="cursor:pointer">CT 3D (.nii.gz)
+          <input type="file" id="inp-ct" accept=".nii.gz,.nii" style="display:none">
+        </label>
+        <label class="badge blue" style="cursor:pointer">肿瘤 mask (.nii.gz，可选)
+          <input type="file" id="inp-mask" accept=".nii.gz,.nii" style="display:none">
+        </label>
+        <label class="badge blue" style="cursor:pointer">检验报告 (.txt/.json)
+          <input type="file" id="inp-labs" accept=".txt,.json" style="display:none">
+        </label>
+        <label class="badge blue" style="cursor:pointer">随访 CT (.nii.gz，可选·纵向)
+          <input type="file" id="inp-ct2" accept=".nii.gz,.nii" style="display:none">
+        </label>
+        <label class="badge blue" style="cursor:pointer">随访 mask (.nii.gz，可选·纵向)
+          <input type="file" id="inp-mask2" accept=".nii.gz,.nii" style="display:none">
+        </label>
+        <input type="text" id="inp-patient" placeholder="患者标签（可选）"
+               style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px;width:140px">
+        <input type="text" id="inp-study-date" placeholder="CT 影像检查日期（可留空=取检验最新日）"
+               style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px;width:240px">
+        <input type="text" id="inp-study-date2" placeholder="随访检查日期（选随访后必填）"
+               style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px;width:200px">
+        <select id="inp-phase"
+                style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px">
+          <option value="unknown">期相：未知</option>
+          <option value="non_contrast">平扫</option>
+          <option value="arterial">动脉期</option>
+          <option value="portal_venous">门脉期</option>
+          <option value="delayed">延迟期</option>
+        </select>
+        <input type="text" id="inp-history" placeholder="临床背景（可选，如乙肝/肝硬化，不进 VLM）"
+               style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px;width:260px">
+        <input type="text" id="inp-age" placeholder="年龄（GALAD 用，可选）"
+               style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px;width:130px">
+        <select id="inp-sex"
+                style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px">
+          <option value="">性别（GALAD 用，可选）</option>
+          <option value="male">男</option>
+          <option value="female">女</option>
+        </select>
+        <label class="badge amber" style="cursor:pointer">
+          <input type="checkbox" id="inp-open" style="vertical-align:-1px"> 同时跑 open 对照臂
+        </label>
+        <select id="inp-glm-mode"
+                style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px">
+          <option value="off">GLM：关闭</option>
+          <option value="live">GLM：实时</option>
+        </select>
+        <select id="inp-report-mode"
+                style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px">
+          <option value="deterministic">报告：确定性</option>
+          <option value="live">报告：DeepSeek 实时</option>
+        </select>
+        <select id="inp-pairing"
+                style="background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 10px;font-size:12px">
+          <option value="user_supplied_unverified">数据配对：未核验</option>
+          <option value="unpaired_poc_composite">数据配对：公开影像＋合成检验</option>
+          <option value="same_subject">数据配对：同一合成病例</option>
+        </select>
+        <label class="badge red" style="cursor:pointer">
+          <input type="checkbox" id="inp-external-confirm" style="vertical-align:-1px">
+          已确认实时模式只外发重新渲染的去标识化 PNG
+        </label>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="button" id="btn-interpret"
+                style="cursor:pointer;font-size:12.5px;padding:6px 16px;border-radius:999px;border:1px solid rgba(88,166,255,.5);background:rgba(88,166,255,.15);color:var(--accent)">
+          开始解读
+        </button>
+        <span id="interpret-status" class="badge">等待输入 · 需 vlm-web 服务</span>
+      </div>
+      <div id="interpret-result" style="margin-top:14px">
+        <p class="rd-scope">选择 CT 和检验文件后点击「开始解读」；不提供 mask 时定量证据会标记为不可用，不会解释为无病灶。</p>
+      </div>
+    </div>
+  </section>
+
+  <details class="card" id="prognosis-research-card" style="margin-bottom:16px">
+    <summary style="padding:12px 16px;cursor:pointer;font-weight:700">
+      队列研究 / TACE 后总生存风险（独立研究合同）
+    </summary>
+    <div class="body">
+      <p class="mode-note">
+        新增链路使用 WAW-TACE 开发、HCC-TACE-Seg 锁定外部验证；比较临床、影像和融合的
+        惩罚 Cox 模型。GLM 仅解释重新渲染的 CT，DeepSeek 仅润色锁定报告，两者均不参与生存预测。
+      </p>
+      <div class="grid">
+        <div class="card"><h2>研究输入</h2><div class="body">
+          同一受试者的基线 CT、公开参考 SEG、年龄、性别和 AFP，以及冻结的 JSON 模型包。
+          结局字段会被接口拒绝。
+        </div></div>
+        <div class="card"><h2>研究输出</h2><div class="body">
+          相对风险指数、WAW 开发队列百分位和中位风险分层；不输出“还能活多久”。
+          结果永久显示回顾性研究与人工复核限制。
+        </div></div>
+      </div>
+      <details class="tech-details" style="margin-top:10px"><summary>接口与复现入口</summary>
+        <p><code>POST /api/prognosis</code>；命令行使用 <code>hcc-demo run-prognosis-report</code>。
+        完整下载、训练和外部验证命令见 README 与 <code>docs/HCC_PUBLIC_OS_PROTOCOL.md</code>。</p>
+      </details>
+    </div>
+  </details>
+
+  <details class="static-demo" open>
+    <summary>静态演示内容（影像/检验面板 · 双模式对比 · 模型报告）—— 点击收起</summary>
 
   <div style="margin-bottom:16px;padding:10px 14px;border:1px solid rgba(210,153,34,.55);border-radius:10px;background:rgba(210,153,34,.08);color:#d29922;font-size:12.5px">
     ⚠️ <b>数据边界声明</b>：本页影像/检验数值为<b>合成数据</b>经<b>确定性管线真实计算</b>的结果；
@@ -518,6 +661,53 @@
     </section>
   </div>
 
+  <!-- ============ 双模式对照：可审计主链路 vs 完全放开对照链路 ============ -->
+  <div class="dual-head">
+    <h2>双模式对照 · 同病例双输出</h2>
+    <div class="sub">同一影像与检验输入，两种融合模式并排；红色差异项即「不可审计」风险的可视化论证。
+      本页静态对比为模拟演示，真实输出用 <code>hcc-demo vlm-live</code> 生成（同款 LLM、同一
+      VlmDemoReport schema、fail-closed 审计与逐数字引用）。</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+      <label class="badge amber" style="cursor:pointer;user-select:none">
+        载入真实结果（web_demo.json）
+        <input type="file" id="real-input" accept=".json,application/json" style="display:none">
+      </label>
+      <span id="real-status" class="badge blue">当前视图：静态模拟演示</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <section class="card">
+      <h2><span class="dot" style="background:var(--ok)"></span>主链路 · 可审计<span class="badge green" style="margin-left:auto">可审计</span></h2>
+      <div class="body">
+        <p class="mode-note">
+          <b>VLM Pass 1 只看影像</b>；检验趋势由 <code>labs.py</code> 确定性计算，
+          融合发生在受控提取 + 规则引擎层——检验数值<b>从未进入 VLM 上下文</b>，
+          「模型判读未被检验值带偏」可被证明。
+        </p>
+        <ul class="ev" id="audit-report"></ul>
+      </div>
+    </section>
+    <section class="card">
+      <h2><span class="dot" style="background:var(--up)"></span>对照链路 · 完全放开<span class="badge red" style="margin-left:auto">不可审计</span></h2>
+      <div class="body">
+        <p class="mode-note">
+          影像 + <code>[LAB]</code> 文本化检验<b>全量进 VLM 单次推理</b>，同一 output schema 提取；
+          数字幻觉与先验偏倚无法与影像证据分离。静态默认视图中的红色条目为<b>模拟输出</b>，
+          载入 <code>web_demo.json</code> 后即替换为模型真实输出。
+        </p>
+        <ul class="ev" id="open-report"></ul>
+        <div class="diff-legend">
+          <span><span class="diff-open">红</span> = 对照链路独有表述</span>
+          <span><span class="diff-audit">绿</span> = 仅主链路提供的确定性结论</span>
+          <span id="citation-status"></span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  </details>
+
   <footer>
     ⚠️ <b>预期用途声明</b>：本页面仅为研究演示（research demonstration only），所有患者数据均为合成数据；
     不构成诊断、分期或治疗决策依据。任何临床使用必须经过具备资质的医师复核。
@@ -545,6 +735,7 @@ const lines = [
 
 const box = document.getElementById("console");
 let li = 0;
+let typingStarted = false;
 function typeLine() {
   if (li >= lines.length) {
     const cur = document.createElement("span");
@@ -566,7 +757,590 @@ function typeLine() {
     }
   }, 10);
 }
-typeLine();
+function startTyping() {
+  if (typingStarted) return;
+  typingStarted = true;
+  typeLine();
+}
+// 控制台进入视口时才回放，避免折叠或未滚动到时动画已跑完
+if ("IntersectionObserver" in window) {
+  const obs = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        startTyping();
+        obs.disconnect();
+      }
+    }
+  }, { threshold: 0.2 });
+  obs.observe(box);
+} else {
+  startTyping();
+}
+</script>
+
+<script>
+// Dual-mode comparison: same case, two fusion modes, difference highlighting.
+const auditReport = [
+  "Imaging: 病灶数 1 → 2（new_lesion_signal）",
+  "Imaging: 总分割肿瘤体积 0.692 → 1.632 mL（+135.8%）",
+  "Imaging: 配对病灶 L1 体积 +109.0%（质心距离 <15 mm）",
+  "Imaging: 未输出增强方式 / LI-RADS / 病理 —— 视觉 token 不支持",
+  "Labs（确定性，不进 VLM prompt）: AFP 6.0 → 18.0 → 85.3 ng/mL，rising，>ULN 7.0",
+  "Labs（确定性）: DCP 25.0 → 68.0 mAU/mL，rising，>ULN 40.0",
+  "Fusion: concordant_progression_signal（reason codes 见上方）",
+  "Fusion: requires_clinician_review = true",
+];
+const openReport = [
+  "Imaging: 病灶数 1 → 2（new_lesion_signal）",
+  "Imaging: 总分割肿瘤体积 0.692 → 1.632 mL（+135.8%）",
+  "Imaging: 右叶病灶怀疑动脉期富血供（视觉 token 未提供增强信息）〔模拟先验偏倚〕",
+  "Labs（注入 prompt 的 UNVERIFIED_CONTEXT）: AFP 85.3 ng/mL [LAB_001]，>ULN 7.0",
+  "Labs（注入）: DCP 68.0 mAU/mL [LAB_002]，>ULN 40.0",
+  "Labs（注入）: 预计 AFP 30 天内超过 170 ng/mL〔模拟数字幻觉〕",
+  "Integrated: 影像进展 + AFP/DCP 上升提示生物学侵袭性 HCC〔模拟过度解读〕",
+  "Fusion: concordant_progression_signal（reason codes 见上方）",
+  "Fusion: requires_clinician_review = true",
+];
+
+function normStatement(s) {
+  return s.replace(/[0-9]+(?:\.[0-9]+)?/g, "N").replace(/[〔〕\[\]]/g, " ").replace(/\s+/g, " ").trim();
+}
+const auditSet = new Set(auditReport.map(normStatement));
+const openSet = new Set(openReport.map(normStatement));
+
+function renderDualList(elId, items, side) {
+  const el = document.getElementById(elId);
+  const otherSet = side === "open" ? auditSet : openSet;
+  for (const text of items) {
+    const li = document.createElement("li");
+    li.textContent = text;
+    const onlyHere = !otherSet.has(normStatement(text));
+    if (onlyHere) li.className = side === "open" ? "diff-open" : "diff-audit";
+    el.appendChild(li);
+  }
+}
+renderDualList("audit-report", auditReport, "audit");
+renderDualList("open-report", openReport, "open");
+
+// ---- real result loader (web_demo.json from `hcc-demo vlm-live`) ----
+const realInput = document.getElementById("real-input");
+realInput.addEventListener("change", (event) => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      applyRealData(JSON.parse(reader.result));
+    } catch (err) {
+      window.alert("无法解析 web_demo.json：" + err.message);
+    }
+  };
+  reader.readAsText(file, "utf-8");
+});
+
+function realStatements(report) {
+  return [
+    ...(report.imaging_observations || []),
+    ...(report.clinical_context_summary || []),
+    ...(report.uncertainties || []),
+    ...(report.missing_information || []),
+    report.evidence_concordance,
+    report.image_conditioning_statement,
+  ].filter(Boolean).map(String);
+}
+
+function renderRealList(elId, items, cls, onlySet) {
+  const el = document.getElementById(elId);
+  el.innerHTML = "";
+  for (const text of items) {
+    const li = document.createElement("li");
+    li.textContent = text;
+    if (onlySet.has(normStatement(text))) li.className = cls;
+    el.appendChild(li);
+  }
+}
+
+function applyRealData(data) {
+  const aud = (data.arms && data.arms.auditable) || {};
+  const opn = (data.arms && data.arms.open) || {};
+  const audLines = realStatements(aud.report || {});
+  const openLines = realStatements(opn.report || {});
+  const diff = data.diff || { auditable_only: [], open_only: [] };
+  const audOnly = new Set((diff.auditable_only || []).map(normStatement));
+  const openOnly = new Set((diff.open_only || []).map(normStatement));
+  renderRealList("audit-report", audLines, "diff-audit", audOnly);
+  renderRealList("open-report", openLines, "diff-open", openOnly);
+
+  const status = document.getElementById("real-status");
+  const bothPass = aud.audit_status === "pass" && opn.audit_status === "pass";
+  status.textContent =
+    "真实结果 · audit " + (aud.audit_status || "?") + " / " + (opn.audit_status || "?") +
+    " · renderer " + (aud.renderer || "?") + " / " + (opn.renderer || "?") +
+    (data.model ? " · " + data.model : "");
+  status.className = "badge " + (bothPass ? "green" : "red");
+
+  const openCitations =
+    data.open_numeric_citation_count != null
+      ? data.open_numeric_citation_count
+      : (opn.report && opn.report.numeric_citations
+          ? opn.report.numeric_citations.length
+          : 0);
+  const citations = document.getElementById("citation-status");
+  citations.textContent =
+    "open 数字引用 " + openCitations +
+    " · audit 数字引用 " + (data.auditable_numeric_citation_count != null ? data.auditable_numeric_citation_count : 0) +
+    " · 幻觉候选 " + ((data.hallucination_candidates || []).length);
+}
+
+// ---- 输入影像与检验 · 获取解读 ----
+function escapeHtml(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[ch]));
+}
+
+function fileToB64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function interpretFiles() {
+  const ct = document.getElementById("inp-ct").files[0];
+  const mask = document.getElementById("inp-mask").files[0];
+  const labs = document.getElementById("inp-labs").files[0];
+  const ct2 = document.getElementById("inp-ct2").files[0];
+  const mask2 = document.getElementById("inp-mask2").files[0];
+  if (!ct || !labs) {
+    window.alert("请选择 CT 和检验报告；Mask 可选");
+    return;
+  }
+  const status = document.getElementById("interpret-status");
+  const btn = document.getElementById("btn-interpret");
+  btn.disabled = true;
+  status.textContent = "正在上传并运行（约 30–60 秒）…";
+  status.className = "badge amber";
+  try {
+    const modes = document.getElementById("inp-open").checked
+      ? ["auditable", "open"]
+      : ["auditable"];
+    const body = {
+      files: {
+        ct: { name: ct.name, data_b64: await fileToB64(ct) },
+        labs: { name: labs.name, content: await labs.text() },
+      },
+      options: {
+        fusion_modes: modes,
+        patient_label: document.getElementById("inp-patient").value.trim(),
+        study_date: document.getElementById("inp-study-date").value.trim(),
+        study_date2: document.getElementById("inp-study-date2").value.trim(),
+        phase: document.getElementById("inp-phase").value,
+        history: document.getElementById("inp-history").value.trim(),
+        age: document.getElementById("inp-age").value.trim(),
+        sex: document.getElementById("inp-sex").value,
+        glm_mode: document.getElementById("inp-glm-mode").value,
+        report_mode: document.getElementById("inp-report-mode").value,
+        pairing_status: document.getElementById("inp-pairing").value,
+        imaging_origin: document.getElementById("inp-pairing").value === "unpaired_poc_composite" ? "real_public" : "user_supplied",
+        laboratory_origin: document.getElementById("inp-pairing").value === "unpaired_poc_composite" ? "synthetic" : "user_supplied",
+        data_relationship: document.getElementById("inp-pairing").value === "unpaired_poc_composite"
+          ? "公开影像与合成检验仅用于软件演示，不属于同一受试者"
+          : "Web 上传影像与检验的同一受试者配对尚未独立核验",
+        external_models_confirmed: document.getElementById("inp-external-confirm").checked,
+      },
+    };
+    if (mask) {
+      body.files.mask = { name: mask.name, data_b64: await fileToB64(mask) };
+    }
+    if (ct2 && mask2) {
+      body.files.ct2 = { name: ct2.name, data_b64: await fileToB64(ct2) };
+      body.files.mask2 = { name: mask2.name, data_b64: await fileToB64(mask2) };
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 180s 超时兜底
+    const resp = await fetch("/api/interpret", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error);
+    renderInterpretation(data.interpretation);
+    if (data.web_demo) applyRealData(data.web_demo);
+    status.textContent = "完成";
+    status.className = "badge green";
+  } catch (err) {
+    if (err && err.name === "AbortError") {
+      status.textContent = "请求超时（超过 180 秒）：请检查服务或减小文件体积后重试";
+    } else {
+      const isNetwork = err instanceof TypeError;
+      status.textContent = isNetwork
+        ? "无法连接本地服务：请先运行 hcc-demo vlm-web（当前为文件模式或服务未启动）"
+        : "失败：" + err.message;
+    }
+    status.className = "badge red";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function riskBadge(tier) {
+  if (!tier) return "";
+  const color = { high: "#ffa198", medium: "#e3b341", low: "#7ee787" }[tier.level] || "#8b949e";
+  return '<span class="pill" style="color:' + color + ';border:1px solid ' + color + ';background:transparent">' +
+    escapeHtml(tier.label || tier.level || "") + "</span>";
+}
+
+function buildLabChart(series) {
+  const entries = Object.entries(series || {});
+  if (!entries.length) return '<p class="rd-scope">无可用检验序列。</p>';
+  const W = 460, H = 190, L = 46, B = 26, T = 16, R = 8;
+  let maxV = 0;
+  const dateKeys = [];
+  entries.forEach(([, s]) => {
+    (s.points || []).forEach((p) => {
+      if (p.value > maxV) maxV = p.value;
+      const key = String(p.date || "").slice(0, 10);
+      if (key && !dateKeys.includes(key)) dateKeys.push(key);
+    });
+    if (s.upper_reference != null && s.upper_reference > maxV) maxV = s.upper_reference;
+  });
+  maxV = maxV * 1.15 || 1;
+  dateKeys.sort();
+  const tMin = dateKeys.length ? Date.parse(dateKeys[0]) : NaN;
+  const tSpan = dateKeys.length > 1
+    ? Date.parse(dateKeys[dateKeys.length - 1]) - tMin
+    : 0;
+  // x 坐标按真实日期的时间比例映射，多序列共享同一时间轴（不再按序列内 index 均分）
+  const xForDate = (d) => {
+    const key = String(d || "").slice(0, 10);
+    if (dateKeys.length <= 1) return L + (W - L - R) / 2;
+    const idx = dateKeys.indexOf(key);
+    if (idx < 0) return L;
+    const ms = Date.parse(key);
+    if (isNaN(ms) || isNaN(tMin) || !(tSpan > 0)) {
+      return L + (idx * (W - L - R)) / (dateKeys.length - 1);
+    }
+    return L + ((ms - tMin) / tSpan) * (W - L - R);
+  };
+  const yAt = (v) => T + (H - T - B) * (1 - v / maxV);
+  const colors = { AFP: "#f85149", DCP: "#58a6ff" };
+  let lines = "", circles = "", refs = "", labels = "";
+  entries.forEach(([name, s]) => {
+    const pts = (s.points || []).slice().sort((a, b) =>
+      String(a.date || "").localeCompare(String(b.date || ""))
+    );
+    const poly = pts.map((p) => xForDate(p.date).toFixed(1) + "," + yAt(p.value).toFixed(1)).join(" ");
+    const color = colors[name] || "#58a6ff";
+    lines += '<polyline points="' + poly + '" fill="none" stroke="' + color + '" stroke-width="2.5"/>';
+    pts.forEach((p) => {
+      circles += '<circle cx="' + xForDate(p.date).toFixed(1) + '" cy="' + yAt(p.value).toFixed(1) + '" r="3.5" fill="' + color + '"/>';
+    });
+    if (s.upper_reference != null) {
+      const ry = yAt(s.upper_reference);
+      refs += '<line x1="' + L + '" y1="' + ry + '" x2="' + (W - R) + '" y2="' + ry + '" stroke="#d29922" stroke-dasharray="5 4"/>';
+      labels += '<text x="' + (W - R) + '" y="' + (ry - 4).toFixed(0) + '" fill="#d29922" font-size="10" text-anchor="end">' +
+        escapeHtml(name) + " ULN " + escapeHtml(s.upper_reference) + "</text>";
+    }
+  });
+  dateKeys.forEach((key) => {
+    labels += '<text x="' + xForDate(key).toFixed(0) + '" y="' + (H - 8) + '" fill="#8b949e" font-size="10" text-anchor="middle">' +
+      escapeHtml(key.slice(5)) + "</text>";
+  });
+  return '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="检验趋势图">' +
+    '<line x1="' + L + '" y1="' + T + '" x2="' + L + '" y2="' + (H - B) + '" stroke="#2b3342"/>' +
+    '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '" stroke="#2b3342"/>' +
+    refs + lines + circles + labels + "</svg>";
+}
+
+function initSliceViewer(interp) {
+  const followup = interp.slices || [];
+  const baseline = interp.slices_baseline || [];
+  const img = document.getElementById("slice-img");
+  const slider = document.getElementById("slice-slider");
+  const label = document.getElementById("slice-label");
+  if ((!followup.length && !baseline.length) || !img || !slider || !label) return;
+  let period = "followup";
+  let idx = 0;
+  function current() {
+    return period === "baseline" && baseline.length ? baseline : followup;
+  }
+  function show() {
+    const arr = current();
+    if (!arr.length) return;
+    if (idx >= arr.length) idx = arr.length - 1;
+    img.src = "data:image/png;base64," + arr[idx].data_b64;
+    img.alt = "CT axial slice " + arr[idx].index;
+    label.textContent = "slice " + arr[idx].index + "（" + (idx + 1) + "/" + arr.length +
+      "，" + (period === "baseline" ? "基线" : "随访") + "）";
+    slider.min = 0;
+    slider.max = arr.length - 1;
+    slider.value = idx;
+  }
+  slider.min = 0;
+  slider.max = current().length - 1;
+  slider.addEventListener("input", () => { idx = Number(slider.value); show(); });
+  const prev = document.getElementById("slice-prev");
+  const next = document.getElementById("slice-next");
+  if (prev) prev.addEventListener("click", () => { if (idx > 0) { idx--; show(); } });
+  if (next) next.addEventListener("click", () => { const arr = current(); if (idx < arr.length - 1) { idx++; show(); } });
+  const btnBase = document.getElementById("period-baseline");
+  const btnFollow = document.getElementById("period-followup");
+  if (btnBase) btnBase.addEventListener("click", () => { if (baseline.length) { period = "baseline"; idx = 0; show(); } });
+  if (btnFollow) btnFollow.addEventListener("click", () => { period = "followup"; idx = 0; show(); });
+  show();
+}
+
+function renderInterpretation(interp) {
+  const el = document.getElementById("interpret-result");
+  const audit = interp.audit_status === "pass"
+    ? '<span class="pill norm">审计通过</span>'
+    : '<span class="pill high">审计拦截</span>';
+  const rep = interp.auditable_report || {};
+  const visLines = (rep.imaging_observations || []).filter((line) => {
+    const t = String(line).toLowerCase();
+    return !/no (laboratory|clinical|context)|not provided|were provided|was provided|no clinical history|consistent with the provided structured context/.test(t)
+      && String(line).trim() !== rep.research_disclaimer;
+  });
+  const visBullets = visLines.map((line) => "<li>" + escapeHtml(line) + "</li>").join("");
+  const visBlock = interp.audit_status === "pass"
+    ? (visBullets
+        ? '<ul class="ev">' + visBullets + "</ul>"
+        : '<p class="rd-scope">模型未返回视觉观察。</p>')
+    : '<div class="rd-note" style="color:#ffa198">模型输出已被审计拦截（fail-closed），不产出模型解读。' +
+      (interp.audit_errors && interp.audit_errors.length
+        ? "<br>拦截原因：" + interp.audit_errors.map(escapeHtml).join("；")
+        : "") +
+      "</div>";
+  const detailLines = [
+    ...(rep.clinical_context_summary || []),
+    ...(rep.uncertainties || []),
+    ...(rep.missing_information || []),
+    rep.evidence_concordance,
+    rep.image_conditioning_statement,
+  ].filter(Boolean).map((line) => "<li>" + escapeHtml(line) + "</li>").join("");
+  const labSentence = (interp.lab_summary || []).map((row) =>
+    escapeHtml(row.marker) + " " + escapeHtml(row.latest_value != null ? row.latest_value : "—") +
+    " " + escapeHtml(row.latest_unit || "") + "（" + escapeHtml(row.trajectory || "—") +
+    (row.latest_above_reference ? "，高于参考" : "，参考内") + "）"
+  ).join("；") || "无可用检验";
+  const slices = interp.slices || [];
+  const metricFrom = (text, key) => {
+    const m = String(text || "").match(new RegExp(key + "=([^;\\s]+)"));
+    return m ? m[1] : null;
+  };
+  const lesionCount = metricFrom(interp.imaging_measurements, "lesion_count");
+  const maxExtent = metricFrom(interp.imaging_measurements, "max_extent_mm");
+  const metricBadge = (label, value) =>
+    '<span class="badge blue" style="font-size:11.5px">' + escapeHtml(label) + "：" + escapeHtml(value == null ? "—" : value) + "</span>";
+  const summaryCard =
+    '<div class="card" style="margin-bottom:14px">' +
+    '<h2><span class="dot" style="background:var(--accent)"></span>报告摘要</h2><div class="body">' +
+    '<p class="rd-scope" style="font-size:13.5px;color:var(--fg)"><b>' + escapeHtml(interp.summary || "—") + "</b></p>" +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +
+      metricBadge("病灶数", lesionCount) +
+      (maxExtent ? metricBadge("最大径", maxExtent + " mm") : "") +
+      (interp.lab_summary || []).map((row) =>
+        metricBadge(row.marker, (row.latest_value != null ? row.latest_value : "—") + " " + (row.latest_unit || ""))
+      ).join("") +
+      riskBadge(interp.risk_tier) +
+    "</div></div></div>";
+  const zoom = interp.lesion_zoom;
+  const zoomCard = zoom
+    ? '<div class="card" style="margin-bottom:14px"><h2><span class="dot" style="background:var(--up)"></span>病灶放大（轴向 slice ' + zoom.slice_index + "）</h2><div class=\"body\">" +
+      '<img src="data:image/png;base64,' + zoom.data_b64 + '" alt="病灶放大" style="width:100%;border-radius:8px;background:#000;display:block">' +
+      '<div style="margin-top:6px;font-size:11px;color:var(--muted)">以分割质心为中心的局部放大，红色 = 肿瘤区域</div>' +
+      "</div></div>"
+    : "";
+  const changeText = Object.entries(interp.lab_change || {}).map(([name, c]) => {
+    if (!c) return escapeHtml(name) + "：无变化率";
+    const sign = c.change_pct > 0 ? "+" : "";
+    return escapeHtml(name) + "：" + escapeHtml(c.start) + " → " + escapeHtml(c.end) + "（" + sign + escapeHtml(c.change_pct) + "%）";
+  }).join("；");
+  const timelineHtml = (interp.timeline || []).map((e) =>
+    '<span class="badge" style="font-size:11px">' + escapeHtml(e.date) + " · " + escapeHtml(e.event) + "</span>"
+  ).join(' <span style="color:var(--muted)">→</span> ');
+  const nextStepsHtml = (interp.next_steps || []).map((s) => "<li>" + escapeHtml(s) + "</li>").join("");
+  const cr = interp.clinical_report || {};
+  const lion = interp.lion_inspired || {};
+  const lionPatient = lion.patient_evidence || {};
+  const glmEvidence = interp.glm_imaging || {};
+  const crosscheck = interp.imaging_crosscheck || {};
+  const controlled = interp.controlled_report || {};
+  const deepseekNarrative = interp.deepseek_narrative || {};
+  const relationship = interp.data_relationship || {};
+  const lesionItems = (lion.lesion_evidence || []).map((lesion) =>
+    "<li><code>" + escapeHtml(lesion.lesion_id) + "</code>：体积 " +
+    escapeHtml(lesion.volume_ml) + " mL；最大三维范围 " +
+    escapeHtml(lesion.max_3d_extent_mm) + " mm</li>"
+  ).join("");
+  const glmItems = (glmEvidence.observations || []).map((finding) =>
+    "<li>" + escapeHtml(finding.finding_id) + " · " +
+    escapeHtml(finding.location) + "：" + escapeHtml(finding.observation) + "</li>"
+  ).join("");
+  const controlledSummary = ((controlled.multimodal_assessment || {}).summary || "—");
+  const narrativeHtml = deepseekNarrative.status === "pass" && deepseekNarrative.narrative
+    ? '<div class="rd-note" style="margin-top:10px"><b>DeepSeek辅助解读：</b>' +
+      escapeHtml(deepseekNarrative.narrative) +
+      '<div style="margin-top:5px;font-size:11px;color:var(--muted)">仅为语言辅助；正式证据和裁决以上述锁定字段为准。</div></div>'
+    : '<div class="rd-note" style="margin-top:10px"><b>DeepSeek辅助解读：</b>' +
+      escapeHtml(deepseekNarrative.status || "unavailable") +
+      '；未验证正文不会进入报告。</div>';
+  const pairingBanner =
+    '<div style="margin-bottom:12px;padding:9px 12px;border:1px solid ' +
+    (relationship.pairing_status === "unpaired_poc_composite" ? "rgba(248,81,73,.55)" : "rgba(210,153,34,.55)") +
+    ';border-radius:8px;background:rgba(210,153,34,.08);font-size:12px">' +
+    '<b>数据关系：</b>' + escapeHtml(relationship.pairing_status || "unknown") +
+    ' · ' + escapeHtml(relationship.statement || "未声明") +
+    (interp.degraded ? ' · <b style="color:#ffa198">模型链路已降级</b>' : '') + "</div>";
+  const pipelineCard =
+    '<div class="card" style="margin-bottom:14px">' +
+    '<h2><span class="dot" style="background:var(--accent)"></span>LiON-inspired 多模态证据链</h2><div class="body">' +
+    pairingBanner +
+    '<div class="grid" style="margin-top:0">' +
+      '<div><p class="rd-scope"><b>像素级：</b>mask ' +
+        (lion.pixel_evidence && lion.pixel_evidence.mask_available ? "可用" : "不可用") +
+        ' · role ' + escapeHtml((lion.pixel_evidence || {}).mask_role || "—") + '</p>' +
+        '<p class="rd-scope"><b>患者级：</b>病灶数 ' +
+        escapeHtml(lionPatient.lesion_count == null ? "不可用" : lionPatient.lesion_count) +
+        ' · 总体积 ' + escapeHtml(lionPatient.total_tumor_volume_ml == null ? "不可用" : lionPatient.total_tumor_volume_ml + " mL") +
+        '</p><ul class="ev">' + (lesionItems || "<li>无可用病灶级记录；不等同于无病灶。</li>") + '</ul></div>' +
+      '<div><p class="rd-scope"><b>GLM：</b>' + escapeHtml(glmEvidence.status || "unavailable") +
+        ' · ' + escapeHtml(glmEvidence.model || "—") + '</p><ul class="ev">' +
+        (glmItems || "<li>没有通过审计的 GLM 观察。</li>") + '</ul>' +
+        '<p class="rd-scope"><b>影像交叉检查：</b>' + escapeHtml(crosscheck.status || "unavailable") +
+        ' · 覆盖 ' + escapeHtml((crosscheck.covered_lesion_ids || []).join("、") || "—") + '</p></div>' +
+    '</div>' +
+    '<div class="rd-note"><b>受控报告：</b>' + escapeHtml(controlledSummary) + '</div>' +
+    narrativeHtml +
+    '<details class="tech-details" style="margin-top:10px"><summary>技术附录 · 状态、缺失证据与固定字段</summary>' +
+      '<pre class="json-view">' + escapeHtml(JSON.stringify({
+        lion_backend: lion.backend,
+        diagnostic_capability: lionPatient.diagnostic_capability,
+        glm_status: glmEvidence.status,
+        crosscheck_status: crosscheck.status,
+        report_type: controlled.report_type,
+        review_required: controlled.review_required,
+      }, null, 2)) + '</pre></details>' +
+    '</div></div>';
+  const galad = interp.galad || {};
+  const galadTier = { LOW: "低风险", INTERMEDIATE: "中风险", HIGH: "高风险" }[galad.risk_tier] || galad.risk_tier || "—";
+  const galadHtml = galad.status === "calculated"
+    ? '<p class="rd-scope"><b>GALAD 评分：</b>' +
+      escapeHtml(galad.score != null ? Number(galad.score).toFixed(3) : "—") +
+      "（风险分层：" + escapeHtml(galadTier) + "；非诊断）</p>"
+    : (galad.status === "incomplete"
+        ? '<p class="rd-scope"><b>GALAD 评分：</b>信息不足（缺：' +
+          escapeHtml((galad.missing_inputs || []).join("、")) + "）</p>"
+        : "");
+  const periodToggle = interp.slices_baseline && slices.length
+    ? '<div style="display:flex;gap:6px;margin-bottom:8px">' +
+      '<button type="button" id="period-baseline" style="cursor:pointer;background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:3px 10px;font-size:12px">基线</button>' +
+      '<button type="button" id="period-followup" style="cursor:pointer;background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:3px 10px;font-size:12px">随访</button>' +
+      "</div>"
+    : "";
+  const clinicalCard =
+    '<div class="card" style="margin-bottom:14px">' +
+    '<h2><span class="dot" style="background:var(--ok)"></span>临床报告（供医师参考 · 非诊断）</h2><div class="body">' +
+    '<p class="rd-scope"><b>影像所见：</b>' + escapeHtml(cr.imaging || "—") + "</p>" +
+    (cr.longitudinal ? '<p class="rd-scope"><b>纵向影像对比：</b>' + escapeHtml(cr.longitudinal) + "</p>" : "") +
+    '<p class="rd-scope"><b>检验所见：</b>' + escapeHtml(cr.laboratory || "—") + "</p>" +
+    galadHtml +
+    '<p class="rd-scope"><b>综合评估：</b>' + escapeHtml(cr.assessment || "—") + "</p>" +
+    '<p class="rd-scope"><b>建议：</b>' + escapeHtml(cr.suggestion || "—") + "</p>" +
+    "</div></div>";
+  const softWarn = (interp.soft_warnings || []).length
+    ? '<div style="margin:10px 0;padding:8px 12px;border:1px solid rgba(210,153,34,.5);border-radius:8px;background:rgba(210,153,34,.08);color:#e3b341;font-size:12px">' +
+      "⚠ 模型输出含提示性诊断表述（consistent / suggestive…），未经医师确认，请复核。" +
+      "</div>"
+    : "";
+  const techLines = [
+    "检验趋势（确定性解析）：" + labSentence,
+    "综合提示（规则引擎口径）：" + (interp.clinical_impression || "") +
+      (interp.guideline_hint ? " " + interp.guideline_hint : ""),
+    "联合解读（受控融合 · 研究口径）：" + (interp.joint_interpretation || ""),
+    "审计状态：" + (interp.audit_status || "unknown") +
+      (interp.audit_errors && interp.audit_errors.length
+        ? "；拦截原因：" + interp.audit_errors.join("；")
+        : ""),
+  ].filter(Boolean).map((line) => "<li>" + escapeHtml(line) + "</li>").join("");
+  const sliceCard = slices.length
+    ? '<div class="card" style="margin-bottom:14px">' +
+      '<h2><span class="dot" style="background:var(--accent)"></span>影像切片浏览</h2>' +
+      '<div class="body">' +
+      periodToggle +
+      '<img id="slice-img" alt="CT 轴向切片" style="width:100%;border-radius:8px;background:#000;display:block">' +
+      '<input type="range" id="slice-slider" min="0" max="' + (slices.length - 1) + '" value="0" style="width:100%;margin:10px 0 6px;accent-color:var(--accent)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">' +
+      '<button type="button" id="slice-prev" style="cursor:pointer;background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:3px 10px">‹ 上一张</button>' +
+      '<span id="slice-label">slice</span>' +
+      '<button type="button" id="slice-next" style="cursor:pointer;background:var(--panel-2);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:3px 10px">下一张 ›</button>' +
+      "</div>" +
+      '<div style="margin-top:6px;font-size:11px;color:var(--muted)">红色 = 分割标注（肿瘤区域）</div>' +
+      "</div></div>"
+    : "";
+  el.innerHTML =
+    '<div class="report-doc" style="max-width:none">' +
+      "<h3>影像 × 检验解读 · " + escapeHtml(interp.patient_label || "CASE") + "</h3>" +
+      '<p class="rd-meta">' +
+        escapeHtml(interp.study_date || "日期未知") +
+        (interp.phase && interp.phase !== "unknown" ? " · 期相：" + escapeHtml(interp.phase) : "") +
+        " · " + riskBadge(interp.risk_tier) + " · " + audit +
+      "</p>" +
+      summaryCard +
+      pipelineCard +
+      sliceCard +
+      zoomCard +
+      '<div class="grid" style="margin-top:0">' +
+        '<div class="card"><h2><span class="dot" style="background:var(--accent-2)"></span>检验趋势</h2><div class="body">' +
+          buildLabChart(interp.lab_series) +
+          (changeText ? '<div style="margin-top:8px;font-size:11.5px;color:var(--muted)">变化率：' + changeText + "</div>" : "") +
+          (timelineHtml ? '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;color:var(--muted)"><span>时间线：</span>' + timelineHtml + "</div>" : "") +
+        "</div></div>" +
+        '<div class="card"><h2><span class="dot" style="background:var(--ok)"></span>影像所见</h2><div class="body">' +
+          '<p class="rd-scope">' + escapeHtml(interp.imaging_measurements || "—") + "</p>" +
+          visBlock +
+        "</div></div>" +
+      "</div>" +
+      clinicalCard +
+      softWarn +
+      (interp.clinical_history
+        ? '<p class="rd-scope"><b>临床背景：</b>' + escapeHtml(interp.clinical_history) + "</p>"
+        : "") +
+      (nextStepsHtml ? "<h4>建议要点</h4><ul class=\"ev\">" + nextStepsHtml + "</ul>" : "") +
+      ((techLines || detailLines)
+        ? '<details class="tech-details" style="margin-top:12px"><summary>技术附录（规则口径 · 审计 · 原始字段）</summary>' +
+          '<ul class="ev">' + techLines + detailLines + "</ul></details>"
+        : "") +
+      '<p class="rd-disclaimer">' + escapeHtml(interp.disclaimer || "") + "</p>" +
+    "</div>";
+  initSliceViewer(interp);
+}
+
+document.getElementById("btn-interpret").addEventListener("click", interpretFiles);
+
+// ---- 服务健康探测：file:// 打开或服务未启动时给出明确提示 ----
+async function checkService() {
+  const status = document.getElementById("interpret-status");
+  try {
+    const resp = await fetch("/api/health", { method: "GET" });
+    if (!resp.ok) throw new Error("health check failed");
+    const data = await resp.json();
+    status.textContent = "服务已连接 · " + (data.version || "");
+    status.className = "badge green";
+    return true;
+  } catch (err) {
+    status.textContent = "未连接服务：请先运行 hcc-demo vlm-web，再刷新本页使用解读功能";
+    status.className = "badge red";
+    return false;
+  }
+}
+checkService();
 </script>
 </body>
 </html>

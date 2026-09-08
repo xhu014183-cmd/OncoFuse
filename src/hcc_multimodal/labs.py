@@ -209,7 +209,16 @@ def _trend(marker: MarkerName, observations: list[MarkerObservation]) -> MarkerT
             latest_value = float(last.value)
             if first_value != 0:
                 change_pct = round(100 * (latest_value - first_value) / abs(first_value), 1)
-            reference = last.reference_high or first.reference_high or 1.0
+            # Prefer the latest reference; fall back to the first, then to a
+            # unit-neutral 1.0 only when no reference is supplied. A literal 0
+            # reference is preserved (rather than silently replaced) since the
+            # material-delta floor below already guards the trend threshold.
+            reference = (
+                last.reference_high
+                if last.reference_high is not None
+                else first.reference_high
+            )
+            reference = reference if reference is not None else 1.0
             material_delta = max(reference * 0.1, 1.0)
             if latest_value >= first_value * 1.2 and latest_value - first_value >= material_delta:
                 direction = "rising"

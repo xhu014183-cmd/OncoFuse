@@ -37,7 +37,10 @@ from .schemas import (
 
 NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 VALUE_RE = re.compile(rf"(?P<cmp><=|>=|<|>)?\s*(?P<number>{NUMBER})")
-DATE_RE = re.compile(r"(?P<date>20\d{2}[-/]\d{1,2}[-/]\d{1,2}|20\d{2}" + "\u5e74" + r"\d{1,2}" + "\u6708" + r"\d{1,2}" + "\u65e5)")
+DATE_RE = re.compile(
+    r"(?P<date>(?:19|20)\d{2}[-/]\d{1,2}[-/]\d{1,2}|"
+    r"(?:19|20)\d{2}" + "\u5e74" + r"\d{1,2}" + "\u6708" + r"\d{1,2}" + "\u65e5)"
+)
 RANGE_RE = re.compile(rf"(?P<low>{NUMBER})\s*(?:-|~|" + "\u81f3" + "|" + "\u5230" + rf")\s*(?P<high>{NUMBER})")
 
 ANALYTE_DEFINITIONS: dict[str, tuple[ClinicalLabGroup, tuple[str, ...], str]] = {

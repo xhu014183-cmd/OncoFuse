@@ -24,6 +24,24 @@ RuleTraceStatus = Literal["fired", "not_fired", "blocked"]
 Concordance = Literal[
     "high", "mixed", "low", "discordant", "insufficient", "unavailable", "illustrative_only"
 ]
+DataOrigin = Literal[
+    "real_clinical",
+    "real_public",
+    "synthetic",
+    "user_supplied",
+    "unknown",
+]
+PairingStatus = Literal[
+    "same_subject",
+    "unpaired_poc_composite",
+    "user_supplied_unverified",
+]
+SegRole = Literal[
+    "expert_reference",
+    "public_reference",
+    "user_supplied",
+    "model_prediction",
+]
 
 
 def _generated_at() -> datetime:
@@ -176,6 +194,116 @@ class ImagingEvidence(ArtifactModel):
         return self
 
 
+class DataRelationship(JsonModel):
+    imaging_origin: DataOrigin
+    laboratory_origin: DataOrigin
+    pairing_status: PairingStatus
+    statement: str
+
+
+class LionPixelEvidence(JsonModel):
+    status: QualityStatus
+    mask_available: bool
+    mask_role: SegRole | None = None
+    mask_sha256: str | None = None
+    image_mask_aligned: bool | None = None
+    geometry_shape: list[int] = Field(default_factory=list)
+    spacing_mm: list[float] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def mask_contract_is_consistent(self) -> LionPixelEvidence:
+        if self.mask_available and self.mask_role is None:
+            raise ValueError("Available pixel evidence requires mask_role")
+        if self.mask_sha256 is not None and len(self.mask_sha256) != 64:
+            raise ValueError("mask_sha256 must be a SHA-256 hex digest")
+        return self
+
+
+class LionLesionEvidence(JsonModel):
+    lesion_id: str
+    voxel_count: int = Field(ge=1)
+    volume_ml: float = Field(gt=0)
+    max_3d_extent_mm: float = Field(gt=0)
+    centroid_world_mm: list[float] = Field(min_length=3, max_length=3)
+    bbox_voxel_ijk: list[list[int]]
+    source_measurement_id: str
+
+
+class LionPatientEvidence(JsonModel):
+    lesion_count: int | None = Field(default=None, ge=0)
+    total_tumor_volume_ml: float | None = Field(default=None, ge=0)
+    max_lesion_extent_mm: float | None = Field(default=None, gt=0)
+    diagnostic_capability: Literal["not_available"] = "not_available"
+
+
+class LionInspiredImagingEvidence(ArtifactModel):
+    patient_id: str
+    study_date: str
+    modality: Literal["CT"]
+    phase: str = "unknown"
+    backend: Literal["precomputed_mask"] = "precomputed_mask"
+    status: QualityStatus
+    pixel_evidence: LionPixelEvidence
+    lesion_evidence: list[LionLesionEvidence]
+    patient_evidence: LionPatientEvidence
+    quality: QualityEvidence
+    limitations: list[str]
+    provenance: dict[str, Any]
+    intended_use: str
+
+    @model_validator(mode="after")
+    def hierarchy_is_consistent(self) -> LionInspiredImagingEvidence:
+        count = self.patient_evidence.lesion_count
+        if count is not None and count != len(self.lesion_evidence):
+            raise ValueError("patient lesion_count must equal lesion_evidence length")
+        if not self.pixel_evidence.mask_available and count is not None:
+            raise ValueError("Unavailable mask evidence cannot expose a lesion count")
+        return self
+
+
+class GlmImagingFinding(JsonModel):
+    finding_id: str
+    lesion_id: str | None = None
+    location: str
+    observation: str
+    confidence: Literal["high", "moderate", "low", "unavailable"]
+    source_refs: list[str] = Field(min_length=1)
+
+
+class GlmImagingEvidence(ArtifactModel):
+    patient_id: str
+    study_date: str
+    phase: str = "unknown"
+    status: QualityStatus
+    provider: Literal["zhipu", "disabled", "unavailable"]
+    model: str
+    prompt_version: str
+    observations: list[GlmImagingFinding]
+    uncertainties: list[str]
+    missing_information: list[str]
+    image_conditioning_statement: str
+    quality: QualityEvidence
+    limitations: list[str]
+    provenance: dict[str, Any]
+
+
+class ImagingCrosscheckEvidence(ArtifactModel):
+    patient_id: str
+    study_date: str
+    status: Literal["pass", "warning", "fail", "not_comparable", "unavailable"]
+    lion_lesion_ids: list[str]
+    glm_referenced_lesion_ids: list[str]
+    covered_lesion_ids: list[str]
+    uncovered_lesion_ids: list[str]
+    unknown_lesion_ids: list[str]
+    supporting_evidence: list[str]
+    conflicting_evidence: list[str]
+    missing_evidence: list[str]
+    quality: QualityEvidence
+    limitations: list[str]
+    intended_use: str
+
+
 class LesionMatchEvidence(JsonModel):
     status: MatchStatus
     baseline_lesion_ids: list[str] = Field(default_factory=list)
@@ -323,6 +451,68 @@ class ControlledReport(JsonModel):
     disclaimer: Literal[
         "Research use only; not for diagnosis, staging, prognosis, or treatment decisions."
     ]
+
+
+class DeepseekNarrativeEvidence(ArtifactModel):
+    """Optional validated prose generated after the controlled report is locked."""
+
+    case_id: str
+    status: Literal["pass", "blocked", "unavailable"]
+    provider: str
+    model: str
+    prompt_version: str = "deepseek-hcc-narrative-v1"
+    narrative: str | None = None
+    validation_errors: list[dict[str, str]] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    intended_use: str = (
+        "optional language assistance over locked research evidence; not a diagnostic conclusion"
+    )
+
+    @model_validator(mode="after")
+    def narrative_matches_status(self) -> DeepseekNarrativeEvidence:
+        if self.status == "pass" and not (self.narrative or "").strip():
+            raise ValueError("A passing DeepSeek narrative must contain validated prose")
+        if self.status != "pass" and self.narrative is not None:
+            raise ValueError("Blocked or unavailable narrative evidence must not retain prose")
+        return self
+
+
+class VlmNumericCitation(JsonModel):
+    """Deterministic per-number attribution attached at the extraction layer.
+
+    The VLM writes evidence IDs (``[LAB_001]``) into its free text; the audit
+    pipeline resolves every numeric token back to a supplied laboratory
+    observation and records the anchor here. This is the extraction-layer
+    source reference that makes diff highlighting attributable.
+    """
+
+    evidence_id: str
+    observed_at: str | None = None
+    analyte: str
+    value: float
+    comparator: Comparator = "eq"
+    unit: str
+    used_in: str
+
+
+class VlmDemoReport(JsonModel):
+    """Structured extraction target shared by both dual-mode VLM arms.
+
+    ``numeric_citations`` is populated by the deterministic audit after model
+    validation; the model itself only fills the free-text fields.
+    """
+
+    fusion_mode: Literal["auditable", "open"]
+    imaging_observations: list[str]
+    clinical_context_summary: list[str]
+    evidence_concordance: str
+    uncertainties: list[str]
+    missing_information: list[str]
+    image_conditioning_statement: str
+    research_disclaimer: Literal[
+        "Research evidence summary only; not for diagnosis, staging, prognosis, or treatment decisions."
+    ]
+    numeric_citations: list[VlmNumericCitation] = Field(default_factory=list)
 
 
 class ImageEmbeddingEvidence(ArtifactModel):

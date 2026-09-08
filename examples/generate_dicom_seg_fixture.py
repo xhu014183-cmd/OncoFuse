@@ -8,7 +8,12 @@ from pathlib import Path
 import numpy as np
 import pydicom
 from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
-from pydicom.uid import CTImageStorage, ExplicitVRLittleEndian, SegmentationStorage, generate_uid
+from pydicom.uid import (
+    CTImageStorage,
+    ExplicitVRLittleEndian,
+    SegmentationStorage,
+    generate_uid,
+)
 
 
 def _dataset(path: Path, storage: str) -> FileDataset:

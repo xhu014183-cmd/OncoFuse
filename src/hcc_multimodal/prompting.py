@@ -48,6 +48,9 @@ def _compact_single_imaging(
             str(warning).startswith("Discarded component") for warning in warnings
         ),
         "interpretation_limits": imaging.get("interpretation_limits") or [],
+        "glm_observations": [
+            str(item) for item in imaging.get("glm_observations") or []
+        ],
     }
 
 
@@ -103,6 +106,9 @@ def _quality_items(compact_imaging: dict[str, Any], labs: LabEvidence) -> list[s
     else:
         items.append(f"Imaging quality status: {compact_imaging['quality_status']}")
         items.extend(str(item) for item in compact_imaging.get("quality_warnings", []))
+        items.extend(
+            str(item) for item in compact_imaging.get("interpretation_limits", [])
+        )
     items.extend(labs.warnings)
     return sorted(set(items))
 

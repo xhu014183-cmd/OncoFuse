@@ -361,6 +361,7 @@ def _prepare_study(
         ct_dir,
         seg_file,
         output / "converted",
+        patient_id=patient_id,
     )
     attribution = json.loads(attribution_path.read_text(encoding="utf-8"))
     evidence = measure_nifti(

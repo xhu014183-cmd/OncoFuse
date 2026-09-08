@@ -1,11 +1,42 @@
 from __future__ import annotations
 
+import base64
+import io
+import json
 from pathlib import Path
 from typing import cast
 
 import nibabel as nib
 import numpy as np
 from PIL import Image, ImageDraw
+
+
+def _load_canonical_pair(
+    image_path: str | Path,
+    mask_path: str | Path,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load image+mask reoriented to closest canonical (RAS+) axes."""
+    image = cast(nib.Nifti1Image, nib.load(str(image_path)))
+    mask = cast(nib.Nifti1Image, nib.load(str(mask_path)))
+    image = nib.as_closest_canonical(image)
+    mask = nib.as_closest_canonical(mask)
+    if image.shape != mask.shape or not np.allclose(
+        image.affine, mask.affine, atol=1e-3
+    ):
+        raise ValueError("Image and mask must have matching shape and affine")
+    image_data = np.asarray(image.dataobj, dtype=np.float32)
+    mask_data = np.asarray(mask.dataobj) > 0
+    return image_data, mask_data
+
+
+def _radiological_axial(slice_xy: np.ndarray) -> np.ndarray:
+    """Convert a canonical axial slice to the radiological viewing orientation.
+
+    Canonical axial arrays have rows = x (L->R) and columns = y (P->A).
+    Radiological view (viewed from the feet): anterior wall on top, the
+    patient's right side on the image left, spine at the bottom.
+    """
+    return np.fliplr(np.rot90(slice_xy, k=1))
 
 
 def create_overlay_montage(
@@ -17,12 +48,7 @@ def create_overlay_montage(
     window_high: float = 300.0,
 ) -> Path:
     """Create a three-slice CT montage with a red mask overlay."""
-    image = cast(nib.Nifti1Image, nib.load(str(image_path)))
-    mask = cast(nib.Nifti1Image, nib.load(str(mask_path)))
-    if image.shape != mask.shape or not np.allclose(image.affine, mask.affine, atol=1e-3):
-        raise ValueError("Image and mask must have matching shape and affine")
-    image_data = np.asarray(image.dataobj, dtype=np.float32)
-    mask_data = np.asarray(mask.dataobj) > 0
+    image_data, mask_data = _load_canonical_pair(image_path, mask_path)
     occupied = np.flatnonzero(mask_data.any(axis=(0, 1)))
     if occupied.size == 0:
         raise ValueError("Cannot create a tumor overlay because the mask is empty")
@@ -34,13 +60,13 @@ def create_overlay_montage(
 
     panels: list[Image.Image] = []
     for index in indices:
+        raw_slice = image_data[:, :, index]
+        mask_slice = mask_data[:, :, index]
         pixels = np.clip(
-            (image_data[:, :, index] - window_low) / (window_high - window_low),
-            0,
-            1,
+            (raw_slice - window_low) / (window_high - window_low), 0, 1
         )
-        gray = np.rot90((pixels * 255).astype(np.uint8))
-        region = np.rot90(mask_data[:, :, index])
+        gray = _radiological_axial((pixels * 255).astype(np.uint8))
+        region = _radiological_axial(mask_slice)
         rgb = np.repeat(gray[:, :, None], 3, axis=2)
         rgb[region] = (
             0.35 * rgb[region] + 0.65 * np.asarray([235, 55, 45])
@@ -60,4 +86,123 @@ def create_overlay_montage(
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     montage.save(target)
+    sidecar = target.with_name(target.stem + "_slices.json")
+    sidecar.write_text(
+        json.dumps({"slice_indices": indices}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
     return target
+
+
+def extract_axial_slice_previews(
+    image_path: str | Path,
+    mask_path: str | Path,
+    *,
+    count: int = 16,
+    width: int = 360,
+    window_low: float = -200.0,
+    window_high: float = 300.0,
+) -> list[dict[str, object]]:
+    """Sample axial slices through the lesion as base64 PNG previews.
+
+    Returns a list of ``{"index": int, "data_b64": str}`` where the PNG shows
+    the CT window with the tumor mask overlaid in red. Slice indices are
+    concentrated on the mask-occupied range so the viewer lands on the lesion.
+    """
+    image_data, mask_data = _load_canonical_pair(image_path, mask_path)
+    occupied = np.flatnonzero(mask_data.any(axis=(0, 1)))
+    depth = image_data.shape[2]
+    if occupied.size:
+        lo, hi = int(occupied.min()), int(occupied.max())
+    else:
+        lo, hi = 0, max(depth - 1, 0)
+    margin = 8
+    lo = max(0, lo - margin)
+    hi = min(depth - 1, hi + margin)
+    span = max(hi - lo, 1)
+    if count <= 1:
+        indices = [lo]
+    else:
+        indices = [
+            min(depth - 1, max(0, round(lo + span * t / (count - 1))))
+            for t in range(count)
+        ]
+        seen: set[int] = set()
+        unique_indices: list[int] = []
+        for index in indices:
+            if index not in seen:
+                seen.add(index)
+                unique_indices.append(index)
+        indices = unique_indices
+    previews: list[dict[str, object]] = []
+    for index in indices:
+        raw_slice = image_data[:, :, index]
+        mask_slice = mask_data[:, :, index]
+        pixels = np.clip(
+            (raw_slice - window_low) / (window_high - window_low), 0, 1
+        )
+        gray = _radiological_axial((pixels * 255).astype(np.uint8))
+        region = _radiological_axial(mask_slice)
+        rgb = np.repeat(gray[:, :, None], 3, axis=2)
+        rgb[region] = (
+            0.35 * rgb[region] + 0.65 * np.asarray([235, 55, 45])
+        ).astype(np.uint8)
+        panel = Image.fromarray(rgb, mode="RGB")
+        if panel.width > width:
+            height = max(round(panel.height * width / panel.width), 1)
+            panel = panel.resize((width, height))
+        buffer = io.BytesIO()
+        panel.save(buffer, format="PNG")
+        previews.append(
+            {
+                "index": index,
+                "data_b64": base64.b64encode(buffer.getvalue()).decode("ascii"),
+            }
+        )
+    return previews
+
+
+def extract_lesion_zoom(
+    image_path: str | Path,
+    mask_path: str | Path,
+    *,
+    width: int = 360,
+    crop: int = 150,
+    window_low: float = -200.0,
+    window_high: float = 300.0,
+) -> dict[str, object]:
+    """Crop and magnify the lesion on its centroid axial slice."""
+    image_data, mask_data = _load_canonical_pair(image_path, mask_path)
+    coords = np.argwhere(mask_data)
+    if coords.size == 0:
+        raise ValueError("Cannot zoom into an empty tumor mask")
+    center_x, center_y, center_z = coords.mean(axis=0)
+    center_z = round(center_z)
+    center_y = round(center_y)
+    center_x = round(center_x)
+    n_x, n_y, _ = mask_data.shape
+    half = crop // 2
+    y0 = max(0, center_y - half)
+    x0 = max(0, center_x - half)
+    y1 = min(n_y, y0 + crop)
+    x1 = min(n_x, x0 + crop)
+    raw_crop = image_data[y0:y1, x0:x1, center_z]
+    mask_crop = mask_data[y0:y1, x0:x1, center_z]
+    pixels = np.clip(
+        (raw_crop - window_low) / (window_high - window_low), 0, 1
+    )
+    gray = _radiological_axial((pixels * 255).astype(np.uint8))
+    region = _radiological_axial(mask_crop)
+    rgb = np.repeat(gray[:, :, None], 3, axis=2)
+    rgb[region] = (
+        0.35 * rgb[region] + 0.65 * np.asarray([235, 55, 45])
+    ).astype(np.uint8)
+    panel = Image.fromarray(rgb, mode="RGB")
+    if panel.width > width:
+        panel = panel.resize((width, max(round(panel.height * width / panel.width), 1)))
+    buffer = io.BytesIO()
+    panel.save(buffer, format="PNG")
+    return {
+        "slice_index": center_z,
+        "data_b64": base64.b64encode(buffer.getvalue()).decode("ascii"),
+    }

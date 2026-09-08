@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from collections import Counter
 from datetime import UTC, datetime
@@ -196,6 +197,8 @@ def convert_ct_and_mass_seg(
     ct_dir: str | Path,
     seg_path: str | Path,
     output_dir: str | Path,
+    *,
+    patient_id: str | None = None,
 ) -> tuple[Path, Path, Path]:
     """Convert one coherent CT acquisition and Mass SEG onto a complete NIfTI grid."""
     try:
@@ -211,7 +214,7 @@ def convert_ct_and_mass_seg(
     output.mkdir(parents=True, exist_ok=True)
 
     ct_by_uid: dict[str, Any] = {}
-    for path in ct_dir.glob("*.dcm"):
+    for path in ct_dir.rglob("*.dcm"):
         dataset = pydicom.dcmread(_io_path(path))
         if hasattr(dataset, "PixelData"):
             ct_by_uid[str(dataset.SOPInstanceUID)] = dataset
@@ -236,25 +239,95 @@ def convert_ct_and_mass_seg(
         raise ValueError(
             "SEG pixel frame count does not match PerFrameFunctionalGroupsSequence"
         )
-    frames = [
+    mass_frames = [
         (index, frame, pixel_frames[index])
         for index, frame in enumerate(seg.PerFrameFunctionalGroupsSequence)
         if int(frame.SegmentIdentificationSequence[0].ReferencedSegmentNumber) == mass_number
     ]
-    if not frames:
+    if not mass_frames:
         raise ValueError("The DICOM SEG contains no frames for the Mass segment")
+    frames = [
+        (index, frame, mask_frame)
+        for index, frame, mask_frame in mass_frames
+        if np.any(mask_frame)
+    ]
+    if not frames:
+        raise ValueError("The DICOM SEG Mass segment contains no non-zero pixels")
+    ignored_empty_frame_count = len(mass_frames) - len(frames)
 
     referenced_counts: Counter[str] = Counter()
     for _, frame, _ in frames:
         for uid in _frame_source_uids(frame):
             if uid in ct_by_uid:
                 referenced_counts[_acquisition_id(ct_by_uid[uid])] += 1
-    if not referenced_counts:
-        raise ValueError("Mass SEG frames do not reference any supplied CT instances")
-    selected_acquisition = min(
-        referenced_counts,
-        key=lambda key: (-referenced_counts[key], key),
-    )
+    if referenced_counts:
+        selected_acquisition = min(
+            referenced_counts,
+            key=lambda key: (-referenced_counts[key], key),
+        )
+    else:
+        acquisition_datasets: dict[str, list[Any]] = {}
+        for dataset in ct_by_uid.values():
+            acquisition_datasets.setdefault(_acquisition_id(dataset), []).append(dataset)
+        positional_scores: dict[str, float] = {}
+        for acquisition_id, datasets in acquisition_datasets.items():
+            reference = datasets[0]
+            try:
+                candidate_orientation = _orientation(reference)
+            except ValueError:
+                continue
+            candidate_normal = np.cross(
+                candidate_orientation[:3], candidate_orientation[3:]
+            )
+            candidate_positions = np.asarray(
+                sorted(
+                    float(
+                        np.dot(
+                            np.asarray(dataset.ImagePositionPatient, dtype=float),
+                            candidate_normal,
+                        )
+                    )
+                    for dataset in datasets
+                ),
+                dtype=float,
+            )
+            if len(candidate_positions) > 1:
+                candidate_differences = np.diff(candidate_positions)
+                candidate_spacing = float(np.median(candidate_differences))
+                if candidate_spacing <= 0 or not np.allclose(
+                    candidate_differences,
+                    candidate_spacing,
+                    atol=max(1e-3, candidate_spacing * 0.01),
+                ):
+                    continue
+            else:
+                candidate_spacing = float(
+                    getattr(reference, "SpacingBetweenSlices", 0.0)
+                    or getattr(reference, "SliceThickness", 0.0)
+                )
+                if candidate_spacing <= 0:
+                    continue
+            frame_errors: list[float] = []
+            for _, frame, _ in frames:
+                frame_position = _frame_position(frame)
+                if frame_position is None:
+                    frame_errors = []
+                    break
+                projection = float(np.dot(frame_position, candidate_normal))
+                frame_errors.append(
+                    float(np.min(np.abs(candidate_positions - projection)))
+                )
+            if frame_errors and max(frame_errors) <= candidate_spacing / 2 + 1e-3:
+                positional_scores[acquisition_id] = max(frame_errors)
+        if not positional_scores:
+            raise ValueError(
+                "Non-zero Mass SEG frames neither reference nor geometrically align with "
+                "a complete supplied CT acquisition"
+            )
+        selected_acquisition = min(
+            positional_scores,
+            key=lambda key: (positional_scores[key], key),
+        )
     selected_datasets = [
         dataset for dataset in ct_by_uid.values() if _acquisition_id(dataset) == selected_acquisition
     ]
@@ -262,6 +335,21 @@ def convert_ct_and_mass_seg(
         raise ValueError(f"No CT instances found for selected {selected_acquisition}")
 
     first_unsorted = selected_datasets[0]
+    dicom_patient_ids = {
+        str(getattr(dataset, "PatientID", "")).strip()
+        for dataset in [*selected_datasets, seg]
+        if str(getattr(dataset, "PatientID", "")).strip()
+    }
+    if len(dicom_patient_ids) != 1:
+        raise ValueError(
+            "CT and SEG must contain one consistent non-empty DICOM PatientID"
+        )
+    dicom_patient_id = next(iter(dicom_patient_ids))
+    if patient_id is not None and patient_id != dicom_patient_id:
+        raise ValueError(
+            "Requested patient_id does not match the CT/SEG DICOM PatientID"
+        )
+    resolved_patient_id = patient_id or dicom_patient_id
     orientation = _orientation(first_unsorted)
     row_direction = orientation[:3]
     column_direction = orientation[3:]
@@ -372,14 +460,27 @@ def convert_ct_and_mass_seg(
     lps_to_ras = np.diag([-1.0, -1.0, 1.0, 1.0])
     ras_affine = lps_to_ras @ lps_affine
 
-    image_path = output / "hcc003_ct.nii.gz"
-    mask_path = output / "hcc003_tumor_mask.nii.gz"
+    output_stem = re.sub(r"[^a-z0-9]+", "", resolved_patient_id.lower())
+    if not output_stem:
+        raise ValueError("DICOM PatientID cannot be converted to a safe output filename")
+    image_path = output / f"{output_stem}_ct.nii.gz"
+    mask_path = output / f"{output_stem}_tumor_mask.nii.gz"
     attribution_path = output / "ATTRIBUTION.json"
     nib.save(nib.Nifti1Image(ct_volume, ras_affine), image_path)
     nib.save(nib.Nifti1Image(mask_volume, ras_affine), mask_path)
     ct_for = str(getattr(first, "FrameOfReferenceUID", "")) or None
     seg_for = str(getattr(seg, "FrameOfReferenceUID", "")) or None
     warnings: list[str] = []
+    if ignored_empty_frame_count:
+        warnings.append(
+            f"Ignored {ignored_empty_frame_count} empty Mass SEG frames during geometry "
+            "selection and mapping"
+        )
+    if not referenced_counts:
+        warnings.append(
+            "The non-zero Mass SEG frames had no matching per-frame SOP references; "
+            "the CT acquisition was selected by verified patient-space alignment"
+        )
     if len(referenced_counts) > 1:
         warnings.append(
             "The source SeriesInstanceUID contains multiple acquisitions; "
@@ -399,7 +500,8 @@ def convert_ct_and_mass_seg(
         "collection_doi": COLLECTION_DOI,
         "license": LICENSE_NAME,
         "license_url": LICENSE_URL,
-        "source_patient_id": SOURCE_PATIENT_ID,
+        "source_patient_id": resolved_patient_id,
+        "source_patient_id_validation": "consistent CT/SEG DICOM PatientID",
         "study_instance_uid": next(iter(study_uids)),
         "ct_series_instance_uid": next(iter(series_uids)),
         "seg_series_instance_uid": str(seg.SeriesInstanceUID),
@@ -408,7 +510,7 @@ def convert_ct_and_mass_seg(
         "selected_acquisition_id": selected_acquisition,
         "selected_segment_label": "Mass",
         "selected_segment_number": mass_number,
-        "phase": "unknown",
+        "phase": _infer_phase(ct_by_uid),
         "conversion": "complete selected CT acquisition plus frame-mapped DICOM SEG; LPS converted to RAS",
         "geometry_qc": {
             "status": "warning" if warnings else "pass",
@@ -432,6 +534,128 @@ def prepare_hcc003(output_dir: str | Path) -> tuple[Path, Path, Path]:
     output = Path(output_dir)
     ct_dir, seg_path = download_hcc003(output)
     return convert_ct_and_mass_seg(ct_dir, seg_path, output / "converted")
+
+
+def _seg_referenced_series_uids(seg_path: str | Path) -> list[str]:
+    """Return the CT series UIDs a DICOM SEG references as its source series."""
+    try:
+        import pydicom
+    except ImportError as exc:
+        raise RuntimeError(
+            "Install public-data dependencies with: pip install -e '.[public-data]'"
+        ) from exc
+    seg = pydicom.dcmread(_io_path(Path(seg_path)))
+    uids: list[str] = []
+    for series_item in getattr(seg, "ReferencedSeriesSequence", []):
+        uid = getattr(series_item, "SeriesInstanceUID", None)
+        if uid:
+            uids.append(str(uid))
+    return uids
+
+
+PHASE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bportal\b|\bvenous\b", re.IGNORECASE), "portal_venous"),
+    (re.compile(r"\barterial\b|\bartery\b", re.IGNORECASE), "arterial"),
+    (re.compile(r"\bdelayed\b|\bequilibrium\b", re.IGNORECASE), "delayed"),
+    (
+        re.compile(r"\bnon[- ]?contrast\b|\bunenhanced\b|\bplain\b|\bpre\b", re.IGNORECASE),
+        "non_contrast",
+    ),
+]
+
+
+def _infer_phase(ct_by_uid: dict[str, Any]) -> str:
+    """Infer the contrast phase from CT DICOM series descriptions/protocols."""
+    parts: list[str] = []
+    for dataset in ct_by_uid.values():
+        for attr in ("SeriesDescription", "ProtocolName"):
+            value = getattr(dataset, attr, None)
+            if value:
+                parts.append(str(value))
+    text = " ".join(parts)
+    for pattern, label in PHASE_PATTERNS:
+        if pattern.search(text):
+            return label
+    return "unknown"
+
+
+def prepare_public_case(
+    output_dir: str | Path,
+    *,
+    patient_id: str,
+    seg_series_uid: str,
+    ct_series_uid: str | None = None,
+) -> tuple[Path, Path, Path]:
+    """Download one HCC-TACE-Seg patient's CT+SEG series and convert to NIfTI.
+
+    When ``ct_series_uid`` is omitted, the SEG is downloaded first and its
+    ``ReferencedSeriesSequence`` is used to discover the CT series it was
+    segmented from. Existing local files are reused, so re-running is a no-op
+    download. Returns ``(image_path, mask_path, attribution_path)``.
+    """
+    if os.name == "nt" and sys.flags.utf8_mode == 0:
+        raise RuntimeError(
+            "On Windows, set PYTHONUTF8=1 before running the public-data downloader"
+        )
+    try:
+        from idc_index import IDCClient
+    except ImportError as exc:
+        raise RuntimeError(
+            "Install public-data dependencies with: pip install -e '.[public-data]'"
+        ) from exc
+
+    output = Path(output_dir)
+    raw = output / "raw"
+    study = raw / patient_id
+    if ct_series_uid is None:
+        seg_only = study / f"SEG_{seg_series_uid}"
+        if not seg_only.exists():
+            client = IDCClient()
+            client.download_dicom_series(
+                [seg_series_uid],
+                str(raw),
+                quiet=True,
+                show_progress_bar=True,
+                dirTemplate="%PatientID/%Modality_%SeriesInstanceUID",
+            )
+        if not seg_only.exists():
+            raise FileNotFoundError(
+                f"IDC download completed without SEG series {seg_series_uid}"
+            )
+        referenced = _seg_referenced_series_uids(_single_dicom(seg_only))
+        if not referenced:
+            raise ValueError(
+                f"SEG {seg_series_uid} has no ReferencedSeriesSequence; "
+                "pass --ct-series explicitly"
+            )
+        ct_series_uid = referenced[0]
+        print(
+            f"SEG {seg_series_uid} references CT series {ct_series_uid[:30]}... "
+            f"({len(referenced)} referenced)"
+        )
+
+    ct_dir = study / f"CT_{ct_series_uid}"
+    seg_dir = study / f"SEG_{seg_series_uid}"
+    missing = [path for path in (ct_dir, seg_dir) if not path.exists()]
+    if missing:
+        client = IDCClient()
+        client.download_dicom_series(
+            [ct_series_uid, seg_series_uid],
+            str(raw),
+            quiet=True,
+            show_progress_bar=True,
+            dirTemplate="%PatientID/%Modality_%SeriesInstanceUID",
+        )
+    if not ct_dir.exists() or not seg_dir.exists():
+        raise FileNotFoundError(
+            f"IDC download completed without the expected series for {patient_id}"
+        )
+    return convert_ct_and_mass_seg(
+        ct_dir,
+        _single_dicom(seg_dir),
+        output / "converted",
+        patient_id=patient_id,
+    )
 
 
 LAB_SCENARIOS = {
@@ -509,3 +733,93 @@ def write_composite_labs(
         encoding="utf-8",
     )
     return target
+
+
+def enumerate_hcc_tace_seg_candidates(
+    *,
+    require_seg: bool = True,
+) -> list[dict[str, Any]]:
+    """Enumerate HCC-TACE-Seg patients with CT and SEG series from the IDC index.
+
+    Metadata-only screening: no imaging is downloaded. Each record lists the
+    patient's studies (timepoints), CT/SEG series, and an estimated download
+    size, so a small development cohort can be selected before any transfer.
+    """
+    try:
+        from idc_index import IDCClient
+    except ImportError as exc:
+        raise RuntimeError(
+            "Install public-data dependencies with: pip install -e '.[public-data]'"
+        ) from exc
+
+    client = IDCClient()
+    patients = client.get_patients(COLLECTION_ID)
+    records: list[dict[str, Any]] = []
+    for patient in patients:
+        patient_id = patient["PatientID"]
+        try:
+            studies = client.get_dicom_studies(patient_id)
+        except (KeyError, TypeError, ValueError, AttributeError, IndexError) as exc:
+            records.append({"patient_id": patient_id, "error": str(exc)})
+            continue
+        study_records: list[dict[str, Any]] = []
+        total_mb = 0.0
+        ct_series_count = 0
+        seg_series_count = 0
+        timepoints: list[str] = []
+        for study in studies:
+            try:
+                series = client.get_dicom_series(study["StudyInstanceUID"])
+            except (KeyError, TypeError, ValueError, AttributeError, IndexError) as exc:
+                study_records.append(
+                    {"study_uid": study["StudyInstanceUID"], "error": str(exc)}
+                )
+                continue
+            ct = [item for item in series if item.get("Modality") == "CT"]
+            seg = [item for item in series if item.get("Modality") == "SEG"]
+            ct_series_count += len(ct)
+            seg_series_count += len(seg)
+            study_mb = sum(
+                float(item.get("series_size_MB") or 0.0) for item in ct + seg
+            )
+            total_mb += study_mb
+            if study.get("StudyDate"):
+                timepoints.append(str(study["StudyDate"]))
+            study_records.append(
+                {
+                    "study_uid": study["StudyInstanceUID"],
+                    "study_date": study.get("StudyDate"),
+                    "description": study.get("StudyDescription"),
+                    "ct_series": [
+                        {
+                            "series_uid": item["SeriesInstanceUID"],
+                            "description": item.get("SeriesDescription"),
+                            "instances": item.get("ImageCount")
+                            or item.get("instance_count"),
+                            "size_mb": item.get("series_size_MB"),
+                        }
+                        for item in ct
+                    ],
+                    "seg_series": [item["SeriesInstanceUID"] for item in seg],
+                    "estimated_mb": round(study_mb, 1),
+                }
+            )
+        records.append(
+            {
+                "patient_id": patient_id,
+                "study_count": len(studies),
+                "timepoints": timepoints,
+                "ct_series_count": ct_series_count,
+                "seg_series_count": seg_series_count,
+                "estimated_ct_seg_mb": round(total_mb, 1),
+                "studies": study_records,
+            }
+        )
+    if require_seg:
+        records = [
+            record
+            for record in records
+            if "error" not in record and record.get("seg_series_count", 0) > 0
+        ]
+    records.sort(key=lambda record: record["patient_id"])
+    return records
