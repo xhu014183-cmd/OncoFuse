@@ -1,102 +1,197 @@
-# OncoFuse: Fail-Closed Evidence Fusion for Liver Imaging & AFP/DCP
+# OncoFuse
 
-[中文说明](README.zh-CN.md) | English
+### Auditable multimodal evidence and survival-risk research for hepatocellular carcinoma
+
+[简体中文](README.zh-CN.md) · English
 
 [![CI](https://github.com/xhu014183-cmd/OncoFuse/actions/workflows/ci.yml/badge.svg)](https://github.com/xhu014183-cmd/OncoFuse/actions/workflows/ci.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
-[![Schema 1.0](https://img.shields.io/badge/schema-1.0.0-green)](schemas/)
-[![License](https://img.shields.io/badge/license-see%20LICENSE-orange)](LICENSE)
-[![Tests: 79 passing](https://img.shields.io/badge/tests-79%20passing-brightgreen)](tests/)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB)](https://www.python.org/)
+[![Tests](https://img.shields.io/badge/tests-268%20passed-brightgreen)](tests/)
+[![Branch coverage](https://img.shields.io/badge/branch%20coverage-76.31%25-brightgreen)](pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](docs/RELEASE_v0.4.0.md)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**An auditable research prototype that fuses segmented 3D liver imaging with
-longitudinal AFP/DCP laboratory evidence — and refuses to answer when
-geometry, units, pairing, registration, or report safety cannot be verified.**
+**OncoFuse is a research-only platform that turns 3D liver CT, expert tumor
+segmentations, laboratory measurements, and clinical context into traceable evidence,
+frozen survival-risk models, and controlled reports.** It is designed to fail closed:
+unverifiable geometry, units, patient pairing, model output, or provenance produces an
+explicit warning or rejection—not a fabricated clinical answer.
 
-It does **not** diagnose HCC, assign LI-RADS/BCLC/RECIST/mRECIST categories,
-predict prognosis, or recommend treatment. Every output is a validated JSON
-artifact with provenance; every claim traces to a rule ID.
-
-> **Live demo (synthetic data):** see [`docs/demo/`](docs/demo/) — open
-> `docs/demo/index.html` locally, or enable GitHub Pages on `docs/` to share
-> it. All numbers are synthetic and labeled as such.
+> **Important:** this repository is not a clinical device. It does not replace
+> radiologists, diagnose HCC, assign LI-RADS/BCLC/RECIST/mRECIST, estimate an
+> individual's remaining lifetime, or recommend treatment.
 
 ---
 
-## Why this exists
+## Why this project matters
 
-Most medical-AI demos answer *"how accurate is the model?"*. This repository
-answers a different question:
+Medical-AI prototypes often end at a model score or a fluent report. OncoFuse treats
+the complete evidence path as the product:
 
-> **Can a multimodal pipeline prove, artifact by artifact, why it said what it
-> said — and stay silent when it cannot?**
+1. **Measure first.** CT and SEG are checked in patient space before any lesion number
+   is calculated.
+2. **Separate evidence from outcomes.** Survival labels never enter feature tables,
+   GLM prompts, DeepSeek prompts, or single-case inference.
+3. **Freeze before external validation.** Preprocessing, feature order, coefficients,
+   thresholds, and model hashes are fixed before the external cohort is opened.
+4. **Constrain language models.** GLM may describe deidentified rendered images;
+   DeepSeek may improve wording. Neither decides the risk score or changes locked
+   evidence.
+5. **Keep unfavorable results.** The external study did not show that the current
+   imaging features improve the clinical baseline. That result is reported rather
+   than tuned away.
 
-- Segmentation masks are **measured deterministically** (voxel counts,
-  volumes, centroids) — never "interpreted" by a language model.
-- Longitudinal lesions are paired by **Hungarian global assignment** with
-  explicit matched / new / disappeared / split / merge / indeterminate states.
-- AFP/DCP trends keep comparators (`<`, `>=`), parse status, reference
-  intervals, and original units. Unusable values stay null — never silently
-  coerced.
-- A versioned YAML **rule engine** fuses imaging and lab evidence into a
-  verdict with reason codes, evidence references, and threshold versions.
-- The LLM, if enabled at all, only **renders** compact deidentified evidence
-  into a report. Changed locked fields, invented numbers, omitted QC,
-  diagnostic assertions, staging, treatment advice, or prompt-injection
-  echoes **block the report**. A deterministic renderer is always available
-  as fallback.
+## Two complementary research tracks
 
-## 30-second start
+| Track | Question | Inputs | Output |
+|---|---|---|---|
+| LiON-inspired evidence reporting | What quantitative and visible evidence is present in this case? | Single-phase CT, optional expert/public SEG, labs, optional HPI | Pixel → lesion → patient evidence, cross-check, controlled report |
+| Public HCC-TACE prognosis study | Among patients already diagnosed with HCC, how well can baseline evidence rank post-TACE overall-survival risk? | Age, sex, AFP, harmonized CT/SEG morphology | Frozen penalized Cox models and independent external validation |
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -e ".[dev]"
-.\.venv\Scripts\hcc-demo run-demo --output demo-output
+The first track borrows LiON's hierarchical evidence-engineering idea; it is **not a
+LiON reproduction**. The second track predicts research-level relative risk in an
+already diagnosed HCC population; it is **not an HCC diagnostic classifier**.
+
+## Formal public-cohort study
+
+```mermaid
+flowchart LR
+    W["WAW-TACE<br/>233 subjects"] --> Q1["Unified QC and<br/>feature extraction"]
+    Q1 --> CV["Nested 5-fold CV<br/>1,000 bootstrap resamples"]
+    CV --> F["Frozen JSON models<br/>coefficients + model hashes"]
+    H["HCC-TACE-Seg<br/>105 public subjects"] --> Q2["Baseline CT/SEG QC<br/>104 eligible · 1 excluded"]
+    F --> X["One-time external validation"]
+    Q2 --> X
+    X --> R["Discrimination · calibration<br/>paired model comparison"]
 ```
 
-Expected verdict: `concordant_progression_signal` (a contract test on fully
-synthetic data — not clinical performance evidence). The output directory
-contains the whole evidence chain:
+### Prespecified models
 
-```text
-baseline_imaging_evidence.json      lesion count, volumes, QC
-followup_imaging_evidence.json
-longitudinal_imaging_evidence.json  lesion pairing, +135.8% volume change
-lab_evidence.json                   AFP/DCP trends with reference limits
-clinical_verdict.json               fused verdict + reason codes
-multimodal_case_evidence.json       audit envelope (origins, pairing status)
-llm_prompt.json                     compact deidentified prompt bundle
+- `clinical_core`: age, sex, `log1p(AFP)`
+- `imaging_core`: lesion count, total tumor volume, maximum 3D bounding-box
+  extent, and largest-lesion sphericity
+- `fused_core`: all seven features
+- `fused_extended`: WAW-only exploratory liver-function model; no external claim
+
+The primary models use the same low-dimensional SEG algorithm in both cohorts. They
+do not use dataset-specific high-dimensional radiomics, post-treatment response,
+progression, number of TACE sessions, or follow-up information.
+
+### Results
+
+| Model | WAW nested out-of-fold C-index (95% CI) | HCC-TACE-Seg external C-index (95% CI) |
+|---|---:|---:|
+| Clinical core | 0.5917 (0.5484–0.6373) | 0.5860 (0.5065–0.6579) |
+| Imaging core | 0.6047 (0.5583–0.6490) | 0.5467 (0.4746–0.6094) |
+| Fused core | **0.6310** (0.5830–0.6725) | 0.5819 (0.5131–0.6516) |
+
+External test: **104 subjects, 92 events**. One subject was excluded before model
+evaluation because the baseline CT had missing/non-uniform slices; no interpolation
+was performed.
+
+- Fused minus clinical: **−0.0041** (95% CI −0.0766 to 0.0671)
+- Fused minus imaging: **0.0352** (95% CI 0.0029 to 0.0691)
+
+**Interpretation:** the current low-dimensional imaging features did not add external
+discrimination beyond age, sex, and AFP. External calibration showed cohort shift,
+and proportional-hazards screening flagged age, sex, or lesion-count terms in one or
+more primary models. No post-external-test tuning was performed.
+
+This is an honest null incremental result—not evidence of clinical utility. The
+research contribution is the reproducible, leakage-controlled external-validation
+workflow and its auditable failure analysis.
+
+See the [prespecified protocol](docs/HCC_PUBLIC_OS_PROTOCOL.md),
+[experiment log](docs/HCC_PUBLIC_OS_EXPERIMENT_LOG.md),
+[data card](docs/HCC_PUBLIC_OS_DATA_CARD.md), and
+[bilingual model card](docs/HCC_PUBLIC_OS_MODEL_CARD.md).
+
+## System architecture
+
+```mermaid
+flowchart TD
+    subgraph Inputs
+        CT["DICOM or NIfTI CT"]
+        SEG["Expert/public tumor SEG"]
+        LAB["Laboratory data"]
+        HPI["Optional HPI timeline"]
+    end
+
+    CT --> IQC["Identity + geometry QC"]
+    SEG --> IQC
+    IQC --> LION["LiON-inspired evidence<br/>pixel → lesion → patient"]
+    CT --> PNG["Deidentified rerendered PNGs"]
+    PNG -. "explicit live mode" .-> GLM["GLM image description"]
+    LAB --> LQC["Unit-aware parsing<br/>reference status + trends"]
+    HPI --> TL["Deterministic timeline"]
+
+    LION --> RULES["Deterministic cross-check<br/>and evidence rules"]
+    GLM --> RULES
+    LQC --> RULES
+    TL --> RULES
+
+    LION --> COX["Optional frozen Cox model"]
+    LQC --> COX
+    COX --> PE["PrognosticEvidence"]
+    RULES --> LOCK["Locked report contract"]
+    PE --> LOCK
+    LOCK --> DET["Deterministic Markdown"]
+    LOCK -. "explicit live mode" .-> DS["DeepSeek language editing"]
+    DS --> AUDIT["Schema + number + boundary audit"]
+    AUDIT --> REPORT["Controlled JSON + Markdown"]
+    DET --> REPORT
 ```
 
-Run the checks:
+### Model responsibilities
 
-```powershell
-.\.venv\Scripts\python -m pytest -q     # 79 tests
-.\.venv\Scripts\ruff check src tests
-.\.venv\Scripts\mypy src\hcc_multimodal
-```
-
-## What it can do today
-
-| Capability | Command | Status |
+| Component | Allowed | Never allowed |
 |---|---|---|
-| LiON-inspired single-phase CT report pipeline | `hcc-demo run-report` | ✅ case_input 1.2 / fail-closed |
-| Synthetic end-to-end demo | `hcc-demo run-demo` | ✅ stable |
-| Longitudinal NIfTI + mask analysis | `hcc-demo analyze` | ✅ stable |
-| DICOM CT + SEG conversion with geometry QC | `hcc-demo convert-dicom-seg` | ✅ stable |
-| Public demo on TCIA HCC-TACE-Seg HCC_003 | `hcc-demo run-public-demo` | ✅ stable |
-| Three-line case pipeline (CT/MR + labs + HPI) | `hcc-demo analyze-case` | ✅ 0.4.0 |
-| Controlled LLM report rendering + audit | `hcc-demo run-deepseek` | ✅ fail-closed |
-| Cohort evaluation with bootstrap intervals | `hcc-demo evaluate-cohort` | ✅ research |
-| Locked multicenter validation workflow | `hcc-demo validate-research-cohort` … | ✅ research |
-| CPU patch-extraction browser demo | `hcc-demo vlm-skeleton-web` | ⚠️ **mock**, no model |
-| VLM task prompts (auditable / open) | `hcc-demo vlm-prompt` | ✅ dual-mode |
-| Dual-mode VLM prompt live demo (text LLM, optional `--image`; fail-closed audit) | `hcc-demo vlm-live` | ✅ fail-closed |
-| Local visualization service (upload imaging + labs → interpretation) | `hcc-demo vlm-web` | ✅ local |
-| Real 3D VLM inference (M3D-LaMed) | — | 🗺️ roadmap, see below |
+| SEG measurement | Geometry-validated lesion quantification | Diagnosis probability or invented segmentation |
+| GLM vision | Describe visible findings from rerendered PNGs | Receive AFP, outcomes, risk scores, DICOM metadata, or patient identifiers |
+| Cox model | Produce frozen relative-risk evidence | Diagnose HCC or estimate remaining months |
+| DeepSeek | Edit language around locked evidence | Change numbers, evidence lists, model identity, limitations, or clinical verdicts |
 
-### LiON-inspired HCC report pipeline
+External model calls are disabled by default. Provider failure leaves a complete
+deterministic report and a degraded audit state; it never becomes a fake AI success.
 
-`run-report` is the recommended single-case entry point. A supplied SEG is converted into pixel-, lesion-, and patient-level quantitative evidence; optional GLM sees only rerendered deidentified PNGs; deterministic rules cross-check attribution and fuse standardized labs. `deepseek-r1-distill-qwen-32b` is routed to an optional number-free Chinese narrative that cannot alter the authoritative JSON; JSON-capable DeepSeek models may still use the controlled structured renderer.
+## Quick start
+
+### 1. Install
+
+```powershell
+git clone https://github.com/xhu014183-cmd/OncoFuse.git
+cd OncoFuse
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -e ".[dev,research]"
+```
+
+Python 3.11 and 3.12 are supported. The deterministic demo does not require a GPU or
+an API key.
+
+### 2. Run the fully synthetic, offline demo
+
+```powershell
+hcc-demo run-demo --output demo-output
+```
+
+Expected research verdict: `concordant_progression_signal`. It is a contract test on
+synthetic data, not clinical performance evidence.
+
+### 3. Run quality checks
+
+```powershell
+python -m ruff check .
+python -m mypy src
+python -m pytest -q --cov=hcc_multimodal --cov-branch
+```
+
+Current verified baseline: **268 passed, 3 skipped, 76.31% branch coverage**.
+
+## Single-case LiON-inspired report
+
+Update the image and SEG paths in the example case, then run the offline path:
 
 ```powershell
 hcc-demo run-report `
@@ -106,339 +201,194 @@ hcc-demo run-report `
   --report-mode deterministic
 ```
 
-External calls require explicit `live` modes. With `--require-live-models`, either provider failing or producing blocked output gives a non-zero exit while retaining audit artifacts. See the [implementation/runbook](docs/LION_INSPIRED_HCC_PIPELINE_PLAN.md) and [case input specification](docs/CASE_INPUT_SPEC.md).
+The report labels the evidence as `LiON-inspired / precomputed-mask`. A missing SEG
+means “quantification unavailable,” never “no lesion.” Single-phase CT cannot establish
+a complete dynamic enhancement pattern.
 
-## Architecture
+## Reproduce the prognosis study
 
-```text
-NIfTI/DICOM + aligned mask ──► deterministic measurement ──► ImagingEvidence
-        optional 3D encoder ──► embedding (audit only, never overrides)
-
-AFP/DCP observations ──► trend evidence ──► LabEvidence
-HPI text ──► dated events ──► HpiTimelineEvidence
-
-ImagingEvidence + LabEvidence (+ HPI)
-        ──► versioned rule fusion ──► ClinicalVerdict
-        ──► compact deidentified prompt ──► controlled LLM renderer
-        ──► safety audit (schema, locked fields, numbers, boundaries)
-```
-
-Full contract: [MULTIMODAL_ARCHITECTURE.md](MULTIMODAL_ARCHITECTURE.md) ·
-three-line pipeline: [docs/THREE_LINE_PIPELINE.md](docs/THREE_LINE_PIPELINE.md)
-
-## Dual-mode VLM prompting
-
-The future VLM entry point (`vlm_prompting.build_vlm_task_prompt`) supports two
-fusion modes:
-
-- **auditable** (default): the prompt contains image tokens + imaging metadata
-  only. Laboratory and HPI context are withheld by design; trends are computed
-  deterministically (`labs.py`) and fused at the rules layer. Prompt metadata
-  records exactly what was withheld (`labs_present_but_withheld`).
-- **open**: laboratory observations are injected as `[UNVERIFIED_CONTEXT]`
-  `[LAB_###]` items with date, value, unit, reference status, trajectory, and a
-  source reference; the prompt requires verbatim, cited copying and forbids
-  re-derivation or extrapolation. This arm exists for side-by-side
-  demonstration of hallucination / prior bias, not for the trusted path.
-
-```powershell
-hcc-demo parse-labs --input examples\lab_report.synthetic.txt --patient-id DEMO --output labs.json
-hcc-demo vlm-prompt --labs labs.json --fusion-mode both --phase portal_venous --timepoint followup --output prompt-out
-```
-
-This writes `vlm_prompt_auditable.{json,txt}` and
-`vlm_prompt_open.{json,txt}`. The browser demo
-([`docs/demo/index.html`](docs/demo/index.html)) shows both outputs side by
-side with difference highlighting and an explicit "不可审计" tag on the open
-arm.
-
-### Real LLM comparison (`vlm-live`)
-
-`hcc-demo vlm-live` sends both arm prompts to the configured OpenAI-compatible
-endpoint (`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME`), validates each
-response against `VlmDemoReport`, attaches per-number `numeric_citations`
-resolved from the injected `[LAB_###]` items, and blocks any report whose
-numbers do not trace back to the supplied context:
-
-```powershell
-hcc-demo vlm-live --labs labs.json --fusion-mode both --output live-out --temperature 0.3 --no-json-object
-```
-
-Notes:
-
-- Pass `--image <png>` to attach real vision input (GLM-4V etc.); pass
-  `--imaging-evidence <json>` to inject deterministic imaging measurements
-  (volumes, lesion counts) into the prompt.
-- Reasoning-class models (e.g. `deepseek-r1-distill-qwen-32b`) can return
-  empty content with `response_format=json_object`; pass `--no-json-object
-  --temperature 0.3` for them. Non-reasoning extraction models are preferred
-  per [docs/VLM_WEB_DEMO_PLAN.md](docs/VLM_WEB_DEMO_PLAN.md).
-- Outputs: `vlm_prompt_{mode}.json`, `vlm_arm_{mode}.json` (raw response +
-  audit), `dual_arm_comparison.json` (statement diff, numeric citations,
-  hallucination candidates), and `web_demo.json` — a self-contained payload
-  that `docs/demo/index.html` can load directly ("载入真实结果") to replace
-  its static mock panes with the real dual-arm output.
-- A missing, malformed, or blocked LLM call never produces a report: the
-  deterministic template renders the supplied context and must pass the same
-  validator.
-
-### Local visualization service (`vlm-web`)
-
-`hcc-demo vlm-web` serves `docs/demo/index.html` with a real input path: upload
-a CT volume (`.nii.gz`) + tumor mask (`.nii.gz`) + a lab report (`.txt` /
-`ClinicalLabEvidence` JSON) and the page returns an auditable interpretation.
-The server measures the imaging deterministically, runs the auditable arm
-(image-only VLM), computes lab trends, and fail-closes on any audit error.
-The page renders a doctor-facing clinical report, not engineering jargon:
-
-```powershell
-hcc-demo vlm-web --port 7861
-```
-
-After upload the page shows:
-
-- **Clinical report (for clinicians, not a diagnosis)** — imaging findings,
-  laboratory findings, combined assessment, and next steps in plain clinical
-  language; rule-engine jargon and the audit trail are collapsed into a
-  "technical appendix".
-- **Scrollable axial slice viewer** (16 slices, slider + prev/next) with the
-  tumor mask overlaid, plus a lesion close-up. Slices are reoriented to
-  canonical RAS axes and rendered in the radiological orientation (anterior on
-  top, the patient's right on the image left).
-- **Lab trend chart** with ULN reference lines, per-marker change percentages,
-  and a timeline aligning the CT date with each lab date.
-- **Longitudinal imaging comparison** (optional second timepoint): upload a
-  follow-up CT + mask and the report adds volume change, new-lesion detection,
-  and a progression / response / stable reading combined with the lab trend;
-  the slice viewer switches between baseline and follow-up.
-- **GALAD score**: when age and sex are supplied, the report includes the GALAD
-  score and risk tier (LOW / INTERMEDIATE / HIGH) derived from AFP, AFP-L3%,
-  DCP, age and sex — explicitly non-diagnostic.
-- **Risk-tier badge** (high / medium / low) derived from a guideline-style
-  heuristic (lesion size × marker thresholds) — explicitly non-diagnostic.
-- **Graded audit**: definite diagnoses ("confirmed HCC") still block the
-  report; softer phrasing ("consistent with …") passes with a visible
-  "requires clinician confirmation" warning.
-- **Service health check** (`GET /api/health`) and a version badge in the page
-  header (`vlm-web 0.4.0-web · started …`) so it is obvious when the server or
-  page is stale; opening the file directly shows a "start the service" hint
-  instead of a bare fetch error.
-
-Open `http://127.0.0.1:7861/` in a browser. The service binds to localhost and
-keeps the LLM key in the server environment; it is a local tool, not a hosted
-GitHub Pages app. Check the "同时跑 open 对照臂" box to also render the
-dual-mode comparison from the same upload.
-
-## Safety invariants
-
-- Every public artifact is validated by a strict Pydantic contract and carries
-  `schema_version`, `pipeline_version`, `generated_at`, sources, and quality.
-- Quality uses only `pass`, `warning`, `fail`, or `unavailable`. Critical
-  imaging or registration failure blocks quantitative longitudinal analysis.
-- Laboratory parsing retains comparator, source text, parse status, reference
-  interval, original unit, and normalized unit.
-- DICOM SEG frames are mapped into a complete, coherent CT acquisition in
-  patient coordinates. SEG-referenced slices do not define the CT extent.
-- Fusion rules and matching thresholds are versioned YAML. Each verdict
-  returns rule IDs, evidence references, threshold version, and explanation.
-- The browser demo (`vlm-skeleton-web`) is an explicit **mock**: patch
-  extraction is real, the "VLM" is a deterministic template. It is labeled as
-  mock in the UI and never presented as model inference.
-
-## Roadmap
-
-**Real 3D VLM inference** is planned and documented in
-[docs/VLM_WEB_DEMO_PLAN.md](docs/VLM_WEB_DEMO_PLAN.md):
-
-- Local DICOM de-identification + preprocessing to `[1,32,256,256]`
-- Inference-only use of `M3D-LaMed-Phi-3-4B` on a rented GPU (no training)
-- Two-pass output: image-only observation (English free text) → constrained
-  structured extraction; clinical context never contaminates image findings
-- Negative-control experiments (zero tensor) proving image conditioning —
-  or honestly reporting its absence
-- Mock demo and real inference remain strictly separated; failure never
-  falls back to mock output
-
-Experimental connector/training modules (`vlm_model`, `vlm_training`,
-`multimodal_connector`, `visual_tokens`) exist in the tree but are **not**
-part of the trusted demo path.
-
-## Detailed usage
-
-### Analyze aligned NIfTI data
-
-```powershell
-.\.venv\Scripts\hcc-demo analyze `
-  --baseline-image baseline_ct.nii.gz --baseline-mask baseline_mass.nii.gz `
-  --followup-image followup_ct.nii.gz --followup-mask followup_mass.nii.gz `
-  --labs labs.json --patient-id RESEARCH_001 `
-  --baseline-date 2026-01-15 --followup-date 2026-07-15 `
-  --baseline-phase portal_venous --followup-phase portal_venous `
-  --registration-status verified --pairing-status same_subject `
-  --output research-output
-```
-
-Do not declare `verified` registration without an external QC basis. Without
-the flag, identical NIfTI grids are recorded as `assumed_same_grid`; other
-unverified geometry is blocked. An optional `--treatment-events` JSON array
-blocks a simple concordance claim when treatment intervenes.
-
-### Laboratory input
-
-```json
-{
-  "patient_id": "RESEARCH_001",
-  "observations": [
-    {"date": "2026-07-15", "marker": "AFP", "value": "<15",
-     "unit": "ng/mL", "referenceRange": "0-7"}
-  ]
-}
-```
-
-Signs, decimals, scientific notation, and `<`, `<=`, `>`, `>=` comparators are
-supported. AFP `ng/mL`/`ug/L` and DCP `mAU/mL`/`AU/L` spellings are
-normalized. Unknown or non-convertible units never enter trends.
-
-### DICOM CT/SEG conversion
-
-```powershell
-.\.venv\Scripts\hcc-demo convert-dicom-seg `
-  --ct-dir path\to\ct-series --seg path\to\seg.dcm --output converted
-```
-
-Checks orientation, spacing, slice order, duplicates, UIDs, per-frame SOP
-references, segment identity, and SEG-to-CT landmark error; maps SEG plane
-orientation and origin to the CT pixel grid including flips.
-
-### Public demo (TCIA HCC-TACE-Seg HCC_003)
-
-```powershell
-.\.venv\Scripts\hcc-demo run-public-demo --output public-data\HCC_003
-```
-
-The public image and expert SEG are real; AFP/DCP scenarios are unrelated
-synthetic values, always labeled `unpaired_poc_composite`.
-
-### Controlled report layer
-
-```powershell
-$env:LLM_API_KEY = "..."
-$env:LLM_BASE_URL = "https://example.invalid/v1"
-$env:LLM_MODEL_NAME = "configured-model"
-.\.venv\Scripts\hcc-demo run-deepseek `
-  --scenario dual_marker_rising --public-dir public-data\HCC_003
-```
-
-If the external service is unavailable, a deterministic validated template is
-produced. If model output violates a safety rule, the audit JSON is retained
-and no formal Markdown is generated. Reasoning-style models are **not**
-recommended for this layer (measured: repetition loops, truncated JSON); use
-a non-reasoning instruct model.
-
-### Patient-level evaluation and locked multicenter validation
-
-See [docs/RESEARCH_EVALUATION.md](docs/RESEARCH_EVALUATION.md) and
-[docs/REAL_COHORT_VALIDATION.md](docs/REAL_COHORT_VALIDATION.md) for the
-cohort contract, directory boundaries, endpoint rules, and the explicit
-`--unlock-external` one-time flag.
-
-### Public HCC overall-survival research track
-
-The baseline prognosis workflow is separate from the longitudinal demonstration.
-WAW-TACE is development-only; HCC-TACE-Seg is a locked external test. See the
-[prespecified protocol](docs/HCC_PUBLIC_OS_PROTOCOL.md),
-[data card](docs/HCC_PUBLIC_OS_DATA_CARD.md), and
-[bilingual model card](docs/HCC_PUBLIC_OS_MODEL_CARD.md),
-[English research summary](docs/HCC_PUBLIC_OS_RESEARCH_SUMMARY.en.md), and
-[clean-directory reproduction commands](docs/HCC_PUBLIC_OS_REPRODUCIBILITY.md).
+Install public-data support and review both source licenses before downloading:
 
 ```powershell
 pip install -e ".[dev,public-data,research]"
 
+$researchDataRoot = "E:\hcc-public-data"
+$researchOutputRoot = "E:\hcc-research-output"
+
 hcc-demo sync-prognosis-data --dataset waw-tace `
-  --tier metadata --data-root E:\hcc-public-data --accept-license
+  --tier metadata --data-root $researchDataRoot --accept-license
+
 hcc-demo sync-prognosis-data --dataset hcc-tace-seg `
-  --tier pilot --data-root E:\hcc-public-data --accept-license
+  --tier pilot --data-root $researchDataRoot --accept-license
 
 hcc-demo build-prognosis-cohort `
-  --data-root E:\hcc-public-data --output research-output\cohort
+  --data-root $researchDataRoot `
+  --output "$researchOutputRoot\cohort"
+
 hcc-demo train-prognosis-model `
-  --cohort research-output\cohort\development-cohort.json `
-  --output research-output\models
-hcc-demo evaluate-prognosis-model `
-  --cohort research-output\cohort\external-test-cohort.json `
-  --models research-output\models `
-  --output research-output\external --unlock-external
+  --cohort "$researchOutputRoot\cohort\development-cohort.json" `
+  --output "$researchOutputRoot\models" `
+  --seed 1729 --bootstrap-iterations 1000
 ```
 
-The primary model uses age, sex, AFP and harmonized reference-SEG morphology. GLM is
-image-only explanation and DeepSeek is optional controlled language editing; neither
-is used to fit survival risk. Features and outcomes are stored in separate CSV files;
-training and external evaluation also require physically separate cohort artifacts.
+Only after inspecting QC, exclusions, folds, internal results, and frozen hashes should
+the full external cohort be prepared and explicitly unlocked. Follow the complete
+[clean-directory reproduction guide](docs/HCC_PUBLIC_OS_REPRODUCIBILITY.md).
 
-Single-case research reporting uses a frozen model bundle:
+Raw datasets and generated research outputs are Git-ignored and must remain outside
+the repository.
+
+## Single-case prognosis report
+
+After a model has been frozen:
 
 ```powershell
 hcc-demo run-prognosis-report `
   --case-input examples\prognosis_case_input.json `
   --model research-output\models\model-bundle-fused.json `
-  --glm-mode off --report-mode deterministic
+  --output prognosis-output `
+  --glm-mode off `
+  --report-mode deterministic
 ```
 
-The Web service exposes the same separate contract at `POST /api/prognosis`; the
-existing `/api/interpret` behavior is unchanged.
+The output contains a relative risk index, WAW reference percentile, research-only
+median risk group, model hash, applicability checks, and limitations. It intentionally
+does not provide an individual life-expectancy estimate.
 
-### CPU three-line case pipeline (0.4.0)
+## Optional GLM and DeepSeek orchestration
 
-For patient-facing intake, use the unified case envelope described in
-[docs/CASE_INPUT_SPEC.md](docs/CASE_INPUT_SPEC.md). It distinguishes the
-clinical task, source data, optional context, and the report level permitted by
-the available evidence.
+Live calls require explicit mode flags and environment-only credentials:
 
 ```powershell
-.\.venv\Scripts\hcc-demo analyze-case --case-input examples\case_input.minimum.json
+$env:ZHIPU_API_KEY = "<set outside Git>"
+$env:ZHIPU_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+$env:ZHIPU_VISION_MODEL = "glm-4.6v-flash"
+
+$env:DEEPSEEK_API_KEY = "<set outside Git>"
+$env:DEEPSEEK_BASE_URL = "<provider-compatible base URL>"
+$env:DEEPSEEK_MODEL = "<configured model>"
+
+hcc-demo run-report `
+  --case-input examples\case_input.recommended.json `
+  --output case-output-live `
+  --glm-mode live `
+  --report-mode live `
+  --require-live-models
 ```
 
-Replace the placeholder DICOM directory before running. The existing individual
-arguments remain available for development and backward compatibility.
+- GLM receives only locally rerendered, deidentified PNGs and anonymous lesion IDs.
+- Reasoning-only DeepSeek models are routed to a number-free narrative path; stable
+  JSON-capable non-reasoning models are preferred for structured report rendering.
+- API keys are never written to prompts, reports, audits, model bundles, or Web health
+  responses.
+
+## Local Web interface
 
 ```powershell
-python examples\generate_dicom_seg_fixture.py --output synthetic-case
-.\.venv\Scripts\hcc-demo analyze-case `
-  --dicom-dir synthetic-case\study --seg synthetic-case\seg.dcm `
-  --image-evidence examples\image_evidence.synthetic.json `
-  --labs examples\lab_report.synthetic.txt --hpi examples\hpi.synthetic.txt `
-  --patient-id RESEARCH_001 --output case-output
+hcc-demo vlm-web --port 7861
 ```
 
-Outputs `imaging.json`, `labs.json`, optional `timeline.json`,
-`case-summary.json`, and `case-summary.md`. The HPI line derives deterministic
-states such as `falling_after_treatment`, `rebound_after_nadir`, and
-`persistent_rising`. External LLM rewriting is disabled by default.
+Open `http://127.0.0.1:7861/`. The local service provides:
 
-### Public schemas
+- axial CT browsing with SEG overlay;
+- laboratory trends and treatment-aligned timelines;
+- LiON-inspired quantitative evidence and imaging cross-checks;
+- deterministic or controlled-LLM reports;
+- `POST /api/interpret` for the evidence-report track;
+- `POST /api/prognosis` for the frozen prognosis track;
+- provider configuration status without secret disclosure.
 
-```powershell
-.\.venv\Scripts\hcc-demo export-schemas --output schemas
-.\.venv\Scripts\hcc-demo validate-json --type clinical-verdict --input demo-output\clinical_verdict.json
+The service binds to localhost and is not a hosted clinical application.
+
+## Key artifacts
+
+```text
+cohort/
+├── dataset-manifest.json
+├── cohort-qc.json
+├── development-features.csv       # predictors only
+├── development-endpoints.csv      # OS labels only
+├── external-test-features.csv
+├── external-test-endpoints.csv
+├── exclusion-manifest.json
+└── source-unit-audit.json
+
+models/
+├── split-manifest.json
+├── model-bundle-clinical.json
+├── model-bundle-imaging.json
+├── model-bundle-fused.json
+└── internal-validation.json
+
+external/
+├── external-unlock-audit.json
+├── external-validation.json
+├── model-comparison.json
+└── figures/
+
+case-output/
+├── lion-inspired-evidence.json
+├── glm-imaging-evidence.json
+├── prognostic-evidence.json
+├── controlled-prognosis-report.json
+├── controlled-prognosis-report.md
+└── provider-audit/
 ```
 
-Schema 1.0 remains current; see [MIGRATION.md](MIGRATION.md).
+Every authoritative artifact is human-readable. Model bundles use JSON rather than
+opaque pickle files.
 
-### Optional 3D encoders
+## Documentation
 
-`statistical-v1` is a deterministic integration baseline. `m3d-clip` is an
-explicitly authorized optional research path. Both record physical resampling,
-fixed CT window, lesion ROI crop, synchronized mask transforms, phase,
-finite-value checks, and L2 norm. Missing encoder support never blocks the
-deterministic rule baseline.
+| Document | Purpose |
+|---|---|
+| [HCC public OS protocol](docs/HCC_PUBLIC_OS_PROTOCOL.md) | Prespecified cohort, endpoint, features, and statistics |
+| [Reproducibility guide](docs/HCC_PUBLIC_OS_REPRODUCIBILITY.md) | Commands from an empty data/output directory |
+| [Model card](docs/HCC_PUBLIC_OS_MODEL_CARD.md) | Intended use, results, limitations, and prohibited claims |
+| [Data card](docs/HCC_PUBLIC_OS_DATA_CARD.md) | Dataset scope, licenses, fields, and exclusions |
+| [Experiment log](docs/HCC_PUBLIC_OS_EXPERIMENT_LOG.md) | Append-only successful and unfavorable runs |
+| [LiON-inspired implementation plan](docs/LION_INSPIRED_HCC_PIPELINE_PLAN.md) | Evidence and reporting design |
+| [Case-input specification](docs/CASE_INPUT_SPEC.md) | Versioned single-case contract |
+| [Three-line evidence pipeline](docs/THREE_LINE_PIPELINE.md) | Imaging, laboratory, and HPI orchestration |
+| [Data sources](DATA_SOURCES.md) | Public-data provenance and governance |
+| [Model sources](MODEL_SOURCES.md) | External model provenance and boundaries |
 
-## Data and model governance
+## Repository layout
 
-Raw DICOM, patient identifiers, model weights, generated embeddings, and
-clinical documents must not be committed. See
-[DISCLAIMER.md](DISCLAIMER.md) · [DATA_SOURCES.md](DATA_SOURCES.md) ·
-[MODEL_SOURCES.md](MODEL_SOURCES.md).
+```text
+src/hcc_multimodal/   validated contracts, QC, modeling, reporting, CLI and Web service
+tests/                 synthetic geometry, leakage, model, LLM-safety and API tests
+examples/              synthetic inputs and versioned case templates
+docs/                  protocol, cards, runbooks, study summary and local demo
+schemas/               exported public JSON Schemas
+```
 
-**Intended use:** research demonstration only. Not for diagnosis, staging,
-prognosis, or treatment decisions.
+## Public data and attribution
+
+- [WAW-TACE](https://zenodo.org/records/12741586): development cohort, 233 subjects
+- [HCC-TACE-Seg](https://www.cancerimagingarchive.net/collection/hcc-tace-seg/):
+  locked external cohort, 105 public subjects
+- [LiON publication](https://www.nature.com/articles/s41591-026-04589-y): conceptual
+  inspiration for hierarchical liver evidence
+- [Public PLAN framework](https://github.com/alibaba-damo-academy/pixel-lesion-patient-network):
+  future backend reference, not bundled or executed here
+
+Users must review and accept source-dataset terms independently. This repository does
+not redistribute raw public imaging, patient-level source tables, model weights, or
+API credentials.
+
+## Intended use and limitations
+
+OncoFuse is an **auditable research prototype for externally validated multimodal HCC
+survival-risk stratification after TACE**. The current external discrimination is weak,
+fusion did not outperform the clinical core, and calibration shifted across cohorts.
+The study is retrospective, depends on public expert segmentations, and has not been
+prospectively or clinically validated.
+
+Use it to study evidence engineering, multimodal orchestration, leakage control,
+survival-model validation, and controlled reporting—not to make patient-care decisions.
+
+## License
+
+Source code is released under the [MIT License](LICENSE). Public datasets and external
+models retain their own licenses and attribution requirements.
